@@ -1,0 +1,14 @@
+# Submission payload for https://github.com/awesome-dsh-plugin/awesome-dsh-plugin
+#
+# Open a PR that adds ONE file, `data/plugins/xmwengxing__dsh-client-ui-sidebar-perfmon.yml`,
+# with exactly the content below (minus these comments), and add nothing else:
+# that repository's READMEs are generated from `data/plugins/*.yml`.
+#
+# The listing bar includes "the repo is at least 1 day old", checked automatically,
+# so the PR is submitted once this repository passes that age.
+url: https://github.com/xmwengxing/dsh-client-ui-sidebar-perfmon
+name: xmwengxing/dsh-client-ui-sidebar-perfmon
+category: ui
+description:
+  en: Host performance monitor in the right Sidebar — CPU, memory and swap gauges plus a process table sortable by CPU, memory or name, refreshed live from /proc.
+  zh: 右侧栏主机性能监控——CPU、内存、交换内存仪表盘，以及可按 CPU、内存、进程名排序的进程列表，由 /proc 实时刷新。
