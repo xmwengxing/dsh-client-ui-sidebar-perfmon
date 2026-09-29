@@ -12,14 +12,14 @@ English | [中文](README.zh-CN.md)
 │   12.5%     39.1%      4.9%                              │
 │    CPU      内存     交换内存                             │
 │ 4 核 · 负载 1.52   4.5 GB / 11.4 GB   0.4 GB / 8.0 GB    │
-├─ 进程列表 ───────────────────── 共 331 个进程 · 显示 60 行 ┤
-│  [CPU ↓] [内存] [进程名]                                  │
+├─ 进程列表 ───────────────────── 共 349 个进程 · 显示 60 行 ┤
+│   CPU ↓        内存      进程名                           │
 │  筛选进程名或 PID ──────────────────────────────────────  │
-│  gnome-shell                    88.9%      849 MB · 7.3% │
-│  PID 147112 · 26 线程 · 运行                             │
-│  MainThread                     69.1%      380 MB · 3.1% │
-│  PID 1666247 · 11 线程 · 运行                            │
-└─────────────── 更新于 15:42:07 · 每 2 秒自动刷新 · 立即刷新 ┘
+│  99.9%      849 MB · 7%  gnome-shell                     │
+│  ▬▬▬▬        ▬▬          PID 147112 · 26 线程 · 运行      │
+│  35.0%      100 MB · 1%  msedge                          │
+│  ▬▬          ▬           PID 740756 · 14 线程 · 睡眠      │
+└─────────────── 更新于 15:50:20 · 每 2 秒自动刷新 · 立即刷新 ┘
 ```
 
 ## What it does
@@ -32,9 +32,13 @@ Session header:
     percentage, a supporting line (core count and load average, used-of-total,
     or the fact that the host has no swap), and a header naming the host.
   - **Processes**: one row per process with CPU share, resident memory and its
-    share of RAM, filtered by name or PID. Three tags select the ordering:
-    `CPU` and `内存` rank every process on the machine by that resource, highest
-    first; `进程名` switches to an alphabetical listing.
+    share of RAM, filtered by name or PID. The three tags are the table's column
+    headers — `CPU`, `内存`, `进程名`, left to right, each sitting directly above the
+    column it orders. `CPU` and `内存` rank every process on the machine by that
+    resource, highest first; `进程名` switches to an alphabetical listing. The two
+    metric columns never shrink, while the name column takes the remaining width
+    and truncates, so a narrow Sidebar loses names before it loses numbers and
+    the table never scrolls sideways.
 - **Performance monitor** button — sits in the Session header's utilities row,
   immediately left of the Sidebar's own expand control, and opens (or focuses)
   the page.

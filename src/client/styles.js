@@ -44,13 +44,17 @@ export const STYLES = `
   flex: 1 1 auto;
   min-block-size: 96px;
   overflow: hidden;
+  /* The two fixed metric tracks, declared once for the header and the rows.
+     "1024.0%" needs 54px; "999.9 MB · 99%" needs 88px. */
+  --perfmon-cpu-column: 54px;
+  --perfmon-mem-column: 88px;
 }
 
 .dsh-perfmon-cardHead {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-block-end: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.18));
 }
 
@@ -97,8 +101,13 @@ export const STYLES = `
   inset: 0;
   display: grid;
   place-items: center;
-  font: var(--dsw-font-xxs-strong-12, 600 13px/1 var(--dsw-font-family, system-ui));
+  /* Sized to stay inside the ring's inner diameter even at four digits
+     ("1024.0%" is the realistic worst case on the per-core scale) — the value
+     used to be wider than the hole it was centred in, so it drew over the ring. */
+  font: var(--dsw-font-xxxs-strong-11, 600 11px/1 var(--dsw-font-family, system-ui));
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .dsh-perfmon-gaugeLabel {
@@ -117,11 +126,47 @@ export const STYLES = `
   white-space: nowrap;
 }
 
-.dsh-perfmon-tabs {
+/* The tag row and the data rows share one template, so every tag is the header
+   of the column it orders. The two metric columns are sized to their widest real
+   content ("1024.0%" and "999.9 MB · 99%") and never shrink; the name column
+   takes the remainder and truncates. */
+.dsh-perfmon-columns,
+.dsh-perfmon-row {
+  display: grid;
+  grid-template-columns:
+    var(--perfmon-cpu-column, 54px)
+    var(--perfmon-mem-column, 88px)
+    minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.dsh-perfmon-columns {
+  padding: 8px 12px 4px;
+}
+
+.dsh-perfmon-column {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 10px 0;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-column--end {
+  justify-content: flex-end;
+}
+
+.dsh-perfmon-column--start {
+  justify-content: flex-start;
+}
+
+/* Cancel the button's own padding so its text lines up with the column's edge —
+   a header that is merely centred over its column reads as decoration. */
+.dsh-perfmon-column--end .dsh-perfmon-tab {
+  margin-inline-end: -6px;
+}
+
+.dsh-perfmon-column--start .dsh-perfmon-tab {
+  margin-inline-start: -6px;
 }
 
 .dsh-perfmon-tab {
@@ -129,11 +174,12 @@ export const STYLES = `
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
-  padding: 5px 10px;
+  padding: 4px 6px;
   border-radius: var(--dsw-radius-sm, 6px);
   border: 0.5px solid transparent;
   background: transparent;
   color: var(--dsw-alias-label-secondary, currentColor);
+  white-space: nowrap;
 }
 
 .dsh-perfmon-tab:hover {
@@ -153,7 +199,7 @@ export const STYLES = `
 }
 
 .dsh-perfmon-filter {
-  margin: 8px 10px 0;
+  margin: 6px 12px 0;
   font: inherit;
   font-size: 11px;
   padding: 5px 0;
@@ -174,14 +220,15 @@ export const STYLES = `
   flex: 1 1 auto;
   min-block-size: 0;
   overflow-y: auto;
+  /* A grid item whose content is wider than its track overflows visibly, and an
+     overflow-y:auto box computes its other axis to auto as well — that pair is
+     what produced a horizontal scrollbar. The tracks are sized so nothing
+     overflows, and this keeps either axis from ever appearing. */
+  overflow-x: hidden;
   padding: 4px 6px 6px;
 }
 
 .dsh-perfmon-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 62px 66px;
-  align-items: center;
-  gap: 6px;
   padding: 5px 6px;
   border-radius: var(--dsw-radius-sm, 6px);
 }
@@ -192,6 +239,7 @@ export const STYLES = `
 
 .dsh-perfmon-name {
   min-inline-size: 0;
+  overflow: hidden;
 }
 
 .dsh-perfmon-nameText {
@@ -211,17 +259,43 @@ export const STYLES = `
 }
 
 .dsh-perfmon-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* The track is fixed and the content is nowrap: clipping here is what keeps a
+     long value from widening the scroller. */
+  min-inline-size: 0;
+  overflow: hidden;
   font-size: 11px;
-  text-align: end;
   font-variant-numeric: tabular-nums;
+}
+
+.dsh-perfmon-metricLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0;
+  min-inline-size: 0;
+  overflow: hidden;
   white-space: nowrap;
+}
+
+.dsh-perfmon-metricValue {
+  flex: none;
+}
+
+.dsh-perfmon-metricShare {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-tertiary, currentColor);
 }
 
 .dsh-perfmon-metricBar {
   block-size: 2px;
-  margin-block-start: 3px;
   border-radius: 999px;
-  background: var(--dsw-alias-bg-layer-3, rgba(127, 127, 127, 0.2));
+  background: var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
   overflow: hidden;
 }
 

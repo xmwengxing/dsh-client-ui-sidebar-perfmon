@@ -12,8 +12,18 @@
 import { createElement as h } from 'react'
 import { barWidth, EMPTY, formatBytes, formatDuration, formatPercent } from './format.js'
 
-/** Ring geometry: a 40px box with room for a 3px stroke. */
-const RING = { size: 44, stroke: 4, radius: 18 }
+/**
+ * Ring geometry.
+ *
+ * The hole has to fit the widest value the gauge can show: at 11px the text
+ * "1024.0%" is about 40px, and the inner diameter here is
+ * `(radius - stroke / 2) * 2` = 45.5px, which leaves the value clear of the ring
+ * at every reading instead of drawing over it.
+ */
+export const GAUGE_RING = { size: 58, stroke: 4.5, radius: 25 }
+
+/** Local alias, so the render body stays terse. */
+const RING = GAUGE_RING
 const CIRCUMFERENCE = 2 * Math.PI * RING.radius
 
 /**
@@ -38,7 +48,10 @@ function Gauge({ label, percent, detail, tone, title }) {
           cy: RING.size / 2,
           r: RING.radius,
           fill: 'none',
-          stroke: 'var(--dsw-alias-bg-layer-3, rgba(127,127,127,0.2))',
+          // A border token, not a background one: the empty part of the ring has to
+          // be visible, or the value reads as floating beside the arc instead of
+          // sitting inside a dial.
+          stroke: 'var(--dsw-alias-border-l3, rgba(127, 127, 127, 0.34))',
           strokeWidth: RING.stroke,
         }),
         h('circle', {

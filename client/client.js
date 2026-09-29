@@ -185,13 +185,17 @@ var STYLES = `
   flex: 1 1 auto;
   min-block-size: 96px;
   overflow: hidden;
+  /* The two fixed metric tracks, declared once for the header and the rows.
+     "1024.0%" needs 54px; "999.9 MB \xB7 99%" needs 88px. */
+  --perfmon-cpu-column: 54px;
+  --perfmon-mem-column: 88px;
 }
 
 .dsh-perfmon-cardHead {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-block-end: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.18));
 }
 
@@ -238,8 +242,13 @@ var STYLES = `
   inset: 0;
   display: grid;
   place-items: center;
-  font: var(--dsw-font-xxs-strong-12, 600 13px/1 var(--dsw-font-family, system-ui));
+  /* Sized to stay inside the ring's inner diameter even at four digits
+     ("1024.0%" is the realistic worst case on the per-core scale) \u2014 the value
+     used to be wider than the hole it was centred in, so it drew over the ring. */
+  font: var(--dsw-font-xxxs-strong-11, 600 11px/1 var(--dsw-font-family, system-ui));
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .dsh-perfmon-gaugeLabel {
@@ -258,11 +267,47 @@ var STYLES = `
   white-space: nowrap;
 }
 
-.dsh-perfmon-tabs {
+/* The tag row and the data rows share one template, so every tag is the header
+   of the column it orders. The two metric columns are sized to their widest real
+   content ("1024.0%" and "999.9 MB \xB7 99%") and never shrink; the name column
+   takes the remainder and truncates. */
+.dsh-perfmon-columns,
+.dsh-perfmon-row {
+  display: grid;
+  grid-template-columns:
+    var(--perfmon-cpu-column, 54px)
+    var(--perfmon-mem-column, 88px)
+    minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.dsh-perfmon-columns {
+  padding: 8px 12px 4px;
+}
+
+.dsh-perfmon-column {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 10px 0;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-column--end {
+  justify-content: flex-end;
+}
+
+.dsh-perfmon-column--start {
+  justify-content: flex-start;
+}
+
+/* Cancel the button's own padding so its text lines up with the column's edge \u2014
+   a header that is merely centred over its column reads as decoration. */
+.dsh-perfmon-column--end .dsh-perfmon-tab {
+  margin-inline-end: -6px;
+}
+
+.dsh-perfmon-column--start .dsh-perfmon-tab {
+  margin-inline-start: -6px;
 }
 
 .dsh-perfmon-tab {
@@ -270,11 +315,12 @@ var STYLES = `
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
-  padding: 5px 10px;
+  padding: 4px 6px;
   border-radius: var(--dsw-radius-sm, 6px);
   border: 0.5px solid transparent;
   background: transparent;
   color: var(--dsw-alias-label-secondary, currentColor);
+  white-space: nowrap;
 }
 
 .dsh-perfmon-tab:hover {
@@ -294,7 +340,7 @@ var STYLES = `
 }
 
 .dsh-perfmon-filter {
-  margin: 8px 10px 0;
+  margin: 6px 12px 0;
   font: inherit;
   font-size: 11px;
   padding: 5px 0;
@@ -315,14 +361,15 @@ var STYLES = `
   flex: 1 1 auto;
   min-block-size: 0;
   overflow-y: auto;
+  /* A grid item whose content is wider than its track overflows visibly, and an
+     overflow-y:auto box computes its other axis to auto as well \u2014 that pair is
+     what produced a horizontal scrollbar. The tracks are sized so nothing
+     overflows, and this keeps either axis from ever appearing. */
+  overflow-x: hidden;
   padding: 4px 6px 6px;
 }
 
 .dsh-perfmon-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 62px 66px;
-  align-items: center;
-  gap: 6px;
   padding: 5px 6px;
   border-radius: var(--dsw-radius-sm, 6px);
 }
@@ -333,6 +380,7 @@ var STYLES = `
 
 .dsh-perfmon-name {
   min-inline-size: 0;
+  overflow: hidden;
 }
 
 .dsh-perfmon-nameText {
@@ -352,17 +400,43 @@ var STYLES = `
 }
 
 .dsh-perfmon-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* The track is fixed and the content is nowrap: clipping here is what keeps a
+     long value from widening the scroller. */
+  min-inline-size: 0;
+  overflow: hidden;
   font-size: 11px;
-  text-align: end;
   font-variant-numeric: tabular-nums;
+}
+
+.dsh-perfmon-metricLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0;
+  min-inline-size: 0;
+  overflow: hidden;
   white-space: nowrap;
+}
+
+.dsh-perfmon-metricValue {
+  flex: none;
+}
+
+.dsh-perfmon-metricShare {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-tertiary, currentColor);
 }
 
 .dsh-perfmon-metricBar {
   block-size: 2px;
-  margin-block-start: 3px;
   border-radius: 999px;
-  background: var(--dsw-alias-bg-layer-3, rgba(127, 127, 127, 0.2));
+  background: var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
   overflow: hidden;
 }
 
@@ -523,6 +597,10 @@ function formatPercent(value, empty = EMPTY) {
   if (typeof value !== "number" || !Number.isFinite(value)) return empty;
   return `${value.toFixed(1)}%`;
 }
+function formatShare(value, empty = EMPTY) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return empty;
+  return `${String(Math.round(value))}%`;
+}
 function formatDuration(seconds) {
   if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return EMPTY;
   const days = Math.floor(seconds / 86400);
@@ -544,7 +622,8 @@ function barWidth(value) {
 }
 
 // src/client/GaugePanel.jsx
-var RING = { size: 44, stroke: 4, radius: 18 };
+var GAUGE_RING = { size: 58, stroke: 4.5, radius: 25 };
+var RING = GAUGE_RING;
 var CIRCUMFERENCE = 2 * Math.PI * RING.radius;
 function Gauge({ label, percent, detail, tone, title }) {
   const known = typeof percent === "number" && Number.isFinite(percent);
@@ -563,7 +642,10 @@ function Gauge({ label, percent, detail, tone, title }) {
           cy: RING.size / 2,
           r: RING.radius,
           fill: "none",
-          stroke: "var(--dsw-alias-bg-layer-3, rgba(127,127,127,0.2))",
+          // A border token, not a background one: the empty part of the ring has to
+          // be visible, or the value reads as floating beside the arc instead of
+          // sitting inside a dial.
+          stroke: "var(--dsw-alias-border-l3, rgba(127, 127, 127, 0.34))",
           strokeWidth: RING.stroke
         }),
         (0, import_react.createElement)("circle", {
@@ -645,14 +727,53 @@ function GaugePanel({ reading, t }) {
 // src/client/ProcessPanel.jsx
 var import_react2 = require("react");
 var SORT_TAGS = [
-  { id: "cpu", label: "tagCpu", arrow: "\u2193" },
-  { id: "mem", label: "tagMem", arrow: "\u2193" },
-  { id: "name", label: "tagName", arrow: "\u2191" }
+  { id: "cpu", label: "tagCpu", arrow: "\u2193", hint: "sortDesc" },
+  { id: "mem", label: "tagMem", arrow: "\u2193", hint: "sortDesc" },
+  { id: "name", label: "tagName", arrow: "\u2191", hint: "sortAsc" }
 ];
-function memoryCell(process) {
-  const size = formatBytes(process.rssBytes);
-  const share = formatPercent(process.memPercent);
-  return share === EMPTY ? size : `${size} \xB7 ${share}`;
+function ColumnHeader({ tag, active, onSortChange, t }) {
+  const right = tag.id !== "name";
+  return (0, import_react2.createElement)(
+    "div",
+    {
+      className: `dsh-perfmon-column dsh-perfmon-column--${right ? "end" : "start"}`,
+      "data-column": tag.id,
+      role: "columnheader"
+    },
+    (0, import_react2.createElement)(
+      "button",
+      {
+        type: "button",
+        className: "dsh-perfmon-tab",
+        "aria-pressed": active,
+        title: `${t(tag.label)} \xB7 ${t(tag.hint)}`,
+        onClick: () => {
+          onSortChange(tag.id);
+        }
+      },
+      t(tag.label),
+      active ? (0, import_react2.createElement)("span", { className: "dsh-perfmon-tabArrow" }, tag.arrow) : null
+    )
+  );
+}
+function MetricCell({ column, value, percent, tone, title }) {
+  return (0, import_react2.createElement)(
+    "div",
+    { className: "dsh-perfmon-metric", "data-column": column, title },
+    (0, import_react2.createElement)(
+      "div",
+      { className: "dsh-perfmon-metricLine" },
+      (0, import_react2.createElement)("span", { className: "dsh-perfmon-metricValue" }, value)
+    ),
+    (0, import_react2.createElement)(
+      "div",
+      { className: "dsh-perfmon-metricBar" },
+      (0, import_react2.createElement)("div", {
+        className: `dsh-perfmon-metricBarFill ${tone}`,
+        style: { inlineSize: `${String(barWidth(percent))}%` }
+      })
+    )
+  );
 }
 function ProcessPanel({ reading, sort, onSortChange, t }) {
   const [filter, setFilter] = (0, import_react2.useState)("");
@@ -680,23 +801,9 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
     ),
     (0, import_react2.createElement)(
       "div",
-      { className: "dsh-perfmon-tabs", role: "group", "aria-label": t("processes") },
+      { className: "dsh-perfmon-columns", role: "row", "aria-label": t("processes") },
       SORT_TAGS.map(
-        (tag) => (0, import_react2.createElement)(
-          "button",
-          {
-            key: tag.id,
-            type: "button",
-            className: "dsh-perfmon-tab",
-            "aria-pressed": sort === tag.id,
-            title: `${t(tag.label)} \xB7 ${tag.id === "name" ? t("sortAsc") : t("sortDesc")}`,
-            onClick: () => {
-              onSortChange(tag.id);
-            }
-          },
-          t(tag.label),
-          sort === tag.id ? (0, import_react2.createElement)("span", { className: "dsh-perfmon-tabArrow" }, tag.arrow) : null
-        )
+        (tag) => (0, import_react2.createElement)(ColumnHeader, { key: tag.id, tag, active: sort === tag.id, onSortChange, t })
       )
     ),
     (0, import_react2.createElement)("input", {
@@ -719,34 +826,29 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
       ) : rows.map(
         (process) => (0, import_react2.createElement)(
           "div",
-          { key: process.pid, className: "dsh-perfmon-row" },
+          { key: process.pid, className: "dsh-perfmon-row", role: "row" },
+          (0, import_react2.createElement)(MetricCell, {
+            column: "cpu",
+            value: formatPercent(process.cpuPercent),
+            percent: process.cpuPercent,
+            tone: "dsh-perfmon-cpuFill",
+            title: `${t("cpu")} ${formatPercent(process.cpuPercent)}`
+          }),
           (0, import_react2.createElement)(
             "div",
-            { className: "dsh-perfmon-name" },
-            (0, import_react2.createElement)("div", { className: "dsh-perfmon-nameText", title: process.name }, process.name),
+            {
+              className: "dsh-perfmon-metric",
+              "data-column": "mem",
+              title: `${t("memory")} ${formatBytes(process.rssBytes)} \xB7 ${formatPercent(process.memPercent)}`
+            },
             (0, import_react2.createElement)(
               "div",
-              { className: "dsh-perfmon-nameMeta" },
-              `PID ${String(process.pid)} \xB7 ${t("threads", { count: process.threads })} \xB7 ${describeState(t, process.state)}`
-            )
-          ),
-          (0, import_react2.createElement)(
-            "div",
-            { className: "dsh-perfmon-metric", title: `${t("cpu")} ${formatPercent(process.cpuPercent)}` },
-            formatPercent(process.cpuPercent),
-            (0, import_react2.createElement)(
-              "div",
-              { className: "dsh-perfmon-metricBar" },
-              (0, import_react2.createElement)("div", {
-                className: "dsh-perfmon-metricBarFill dsh-perfmon-cpuFill",
-                style: { inlineSize: `${String(barWidth(process.cpuPercent))}%` }
-              })
-            )
-          ),
-          (0, import_react2.createElement)(
-            "div",
-            { className: "dsh-perfmon-metric", title: `${t("memory")} ${memoryCell(process)}` },
-            memoryCell(process),
+              { className: "dsh-perfmon-metricLine" },
+              (0, import_react2.createElement)("span", { className: "dsh-perfmon-metricValue" }, formatBytes(process.rssBytes)),
+              // The share is the first thing to go when the column is tight:
+              // the bar still carries it, and the exact figure stays in the tooltip.
+              (0, import_react2.createElement)("span", { className: "dsh-perfmon-metricShare" }, ` \xB7 ${formatShare(process.memPercent)}`)
+            ),
             (0, import_react2.createElement)(
               "div",
               { className: "dsh-perfmon-metricBar" },
@@ -754,6 +856,16 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
                 className: "dsh-perfmon-metricBarFill dsh-perfmon-memFill",
                 style: { inlineSize: `${String(barWidth(process.memPercent))}%` }
               })
+            )
+          ),
+          (0, import_react2.createElement)(
+            "div",
+            { className: "dsh-perfmon-name", "data-column": "name" },
+            (0, import_react2.createElement)("div", { className: "dsh-perfmon-nameText", title: process.name }, process.name),
+            (0, import_react2.createElement)(
+              "div",
+              { className: "dsh-perfmon-nameMeta" },
+              `PID ${String(process.pid)} \xB7 ${t("threads", { count: process.threads })} \xB7 ${describeState(t, process.state)}`
             )
           )
         )

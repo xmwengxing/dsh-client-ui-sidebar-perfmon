@@ -10,9 +10,16 @@
 
 export { PerfmonBody } from '../../src/client/PerfmonBody.jsx'
 export { ProcessPanel, SORT_TAGS } from '../../src/client/ProcessPanel.jsx'
-export { GaugePanel } from '../../src/client/GaugePanel.jsx'
+export { GaugePanel, GAUGE_RING } from '../../src/client/GaugePanel.jsx'
 export { HeaderButton } from '../../src/client/HeaderButton.jsx'
 export { PerfmonIcon } from '../../src/client/Icon.jsx'
 export { createTranslator, describeState, resolveLanguage } from '../../src/client/copy.js'
-export { formatBytes, formatPercent, formatDuration, formatClock, barWidth } from '../../src/client/format.js'
+export {
+  formatBytes,
+  formatPercent,
+  formatShare,
+  formatDuration,
+  formatClock,
+  barWidth,
+} from '../../src/client/format.js'
 export { SNAPSHOT_PATH } from '../../src/client/api.js'

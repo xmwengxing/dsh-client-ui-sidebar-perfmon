@@ -1,35 +1,87 @@
 /**
- * The process window: three sort tags over a scrollable process table.
+ * The process window: three sort tags that are also the table's column headers.
  *
- * The tags are `CPU`, `内存` and `进程名`. Picking `CPU` or `内存` re-sorts by that
- * resource's usage, highest first — the ordering the host performs, so it ranks
- * every process on the machine and not just the rows already on screen. Picking
- * `进程名` switches to an alphabetical listing, where the filter box is what makes
- * a long list navigable.
+ * The tags and the rows share one grid template, so each tag sits directly above
+ * the column it orders — `CPU`, `内存`, `进程名`, left to right, in both the header
+ * and every row. Picking a tag re-sorts through the host, which ranks every
+ * process on the machine by that key rather than reordering the visible page.
+ *
+ * Width behaviour is deliberate. The two metric columns are sized to their widest
+ * real content and never shrink, while the name column takes what is left and
+ * truncates: a narrow Sidebar therefore loses process names before it loses the
+ * numbers, and nothing ever overflows sideways into a horizontal scrollbar.
  *
  * @module dsh-client-ui-sidebar-perfmon/ProcessPanel
  */
 
 import { createElement as h, useMemo, useState } from 'react'
-import { barWidth, EMPTY, formatBytes, formatPercent } from './format.js'
+import { barWidth, EMPTY, formatBytes, formatPercent, formatShare } from './format.js'
 import { describeState } from './copy.js'
 
-/** The three tags, in the order the panel shows them. */
+/**
+ * The three tags, in the order they appear as column headers — which is also the
+ * order of the columns they head.
+ */
 export const SORT_TAGS = [
-  { id: 'cpu', label: 'tagCpu', arrow: '↓' },
-  { id: 'mem', label: 'tagMem', arrow: '↓' },
-  { id: 'name', label: 'tagName', arrow: '↑' },
+  { id: 'cpu', label: 'tagCpu', arrow: '↓', hint: 'sortDesc' },
+  { id: 'mem', label: 'tagMem', arrow: '↓', hint: 'sortDesc' },
+  { id: 'name', label: 'tagName', arrow: '↑', hint: 'sortAsc' },
 ]
 
 /**
- * Format one process's memory cell.
- * @param {object} process - the process row.
- * @returns {string} size plus share of total memory.
+ * One sortable column header.
+ *
+ * The button's own padding is cancelled by a negative margin so its text edge
+ * lines up with the numbers beneath it: a header that is merely centered over its
+ * column reads as decoration, while an aligned one reads as a column label.
+ * @param {object} props - the tag, its active state, and the handlers.
+ * @returns {import('react').ReactNode} the header cell.
  */
-function memoryCell(process) {
-  const size = formatBytes(process.rssBytes)
-  const share = formatPercent(process.memPercent)
-  return share === EMPTY ? size : `${size} · ${share}`
+function ColumnHeader({ tag, active, onSortChange, t }) {
+  const right = tag.id !== 'name'
+  return h(
+    'div',
+    {
+      className: `dsh-perfmon-column dsh-perfmon-column--${right ? 'end' : 'start'}`,
+      'data-column': tag.id,
+      role: 'columnheader',
+    },
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'dsh-perfmon-tab',
+        'aria-pressed': active,
+        title: `${t(tag.label)} · ${t(tag.hint)}`,
+        onClick: () => {
+          onSortChange(tag.id)
+        },
+      },
+      t(tag.label),
+      active ? h('span', { className: 'dsh-perfmon-tabArrow' }, tag.arrow) : null,
+    ),
+  )
+}
+
+/** One cell showing a percentage with a proportional bar under it. */
+function MetricCell({ column, value, percent, tone, title }) {
+  return h(
+    'div',
+    { className: 'dsh-perfmon-metric', 'data-column': column, title },
+    h(
+      'div',
+      { className: 'dsh-perfmon-metricLine' },
+      h('span', { className: 'dsh-perfmon-metricValue' }, value),
+    ),
+    h(
+      'div',
+      { className: 'dsh-perfmon-metricBar' },
+      h('div', {
+        className: `dsh-perfmon-metricBarFill ${tone}`,
+        style: { inlineSize: `${String(barWidth(percent))}%` },
+      }),
+    ),
+  )
 }
 
 /**
@@ -46,8 +98,7 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
     const needle = filter.trim().toLowerCase()
     if (needle === '') return processes
     return processes.filter(
-      (process) =>
-        process.name.toLowerCase().includes(needle) || String(process.pid).includes(needle),
+      (process) => process.name.toLowerCase().includes(needle) || String(process.pid).includes(needle),
     )
   }, [processes, filter])
 
@@ -70,23 +121,9 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
     ),
     h(
       'div',
-      { className: 'dsh-perfmon-tabs', role: 'group', 'aria-label': t('processes') },
+      { className: 'dsh-perfmon-columns', role: 'row', 'aria-label': t('processes') },
       SORT_TAGS.map((tag) =>
-        h(
-          'button',
-          {
-            key: tag.id,
-            type: 'button',
-            className: 'dsh-perfmon-tab',
-            'aria-pressed': sort === tag.id,
-            title: `${t(tag.label)} · ${tag.id === 'name' ? t('sortAsc') : t('sortDesc')}`,
-            onClick: () => {
-              onSortChange(tag.id)
-            },
-          },
-          t(tag.label),
-          sort === tag.id ? h('span', { className: 'dsh-perfmon-tabArrow' }, tag.arrow) : null,
-        ),
+        h(ColumnHeader, { key: tag.id, tag, active: sort === tag.id, onSortChange, t }),
       ),
     ),
     h('input', {
@@ -111,34 +148,29 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
         : rows.map((process) =>
             h(
               'div',
-              { key: process.pid, className: 'dsh-perfmon-row' },
+              { key: process.pid, className: 'dsh-perfmon-row', role: 'row' },
+              h(MetricCell, {
+                column: 'cpu',
+                value: formatPercent(process.cpuPercent),
+                percent: process.cpuPercent,
+                tone: 'dsh-perfmon-cpuFill',
+                title: `${t('cpu')} ${formatPercent(process.cpuPercent)}`,
+              }),
               h(
                 'div',
-                { className: 'dsh-perfmon-name' },
-                h('div', { className: 'dsh-perfmon-nameText', title: process.name }, process.name),
+                {
+                  className: 'dsh-perfmon-metric',
+                  'data-column': 'mem',
+                  title: `${t('memory')} ${formatBytes(process.rssBytes)} · ${formatPercent(process.memPercent)}`,
+                },
                 h(
                   'div',
-                  { className: 'dsh-perfmon-nameMeta' },
-                  `PID ${String(process.pid)} · ${t('threads', { count: process.threads })} · ${describeState(t, process.state)}`,
+                  { className: 'dsh-perfmon-metricLine' },
+                  h('span', { className: 'dsh-perfmon-metricValue' }, formatBytes(process.rssBytes)),
+                  // The share is the first thing to go when the column is tight:
+                  // the bar still carries it, and the exact figure stays in the tooltip.
+                  h('span', { className: 'dsh-perfmon-metricShare' }, ` · ${formatShare(process.memPercent)}`),
                 ),
-              ),
-              h(
-                'div',
-                { className: 'dsh-perfmon-metric', title: `${t('cpu')} ${formatPercent(process.cpuPercent)}` },
-                formatPercent(process.cpuPercent),
-                h(
-                  'div',
-                  { className: 'dsh-perfmon-metricBar' },
-                  h('div', {
-                    className: 'dsh-perfmon-metricBarFill dsh-perfmon-cpuFill',
-                    style: { inlineSize: `${String(barWidth(process.cpuPercent))}%` },
-                  }),
-                ),
-              ),
-              h(
-                'div',
-                { className: 'dsh-perfmon-metric', title: `${t('memory')} ${memoryCell(process)}` },
-                memoryCell(process),
                 h(
                   'div',
                   { className: 'dsh-perfmon-metricBar' },
@@ -146,6 +178,16 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
                     className: 'dsh-perfmon-metricBarFill dsh-perfmon-memFill',
                     style: { inlineSize: `${String(barWidth(process.memPercent))}%` },
                   }),
+                ),
+              ),
+              h(
+                'div',
+                { className: 'dsh-perfmon-name', 'data-column': 'name' },
+                h('div', { className: 'dsh-perfmon-nameText', title: process.name }, process.name),
+                h(
+                  'div',
+                  { className: 'dsh-perfmon-nameMeta' },
+                  `PID ${String(process.pid)} · ${t('threads', { count: process.threads })} · ${describeState(t, process.state)}`,
                 ),
               ),
             ),

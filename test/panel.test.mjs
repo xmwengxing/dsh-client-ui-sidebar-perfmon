@@ -20,9 +20,16 @@ import TestRenderer from 'react-test-renderer'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const require = createRequire(import.meta.url)
-const { PerfmonBody, ProcessPanel, GaugePanel, HeaderButton, createTranslator, SNAPSHOT_PATH } = require(
-  resolve(root, 'test/.build/components.cjs'),
-)
+const {
+  PerfmonBody,
+  ProcessPanel,
+  GaugePanel,
+  HeaderButton,
+  GAUGE_RING,
+  createTranslator,
+  formatShare,
+  SNAPSHOT_PATH,
+} = require(resolve(root, 'test/.build/components.cjs'))
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const t = createTranslator()
@@ -119,6 +126,23 @@ function tagsOf(renderer) {
   )
 }
 
+/**
+ * The declared column order of a grid, read from the data attribute both the
+ * header cells and the row cells carry.
+ * @param {object} renderer - the test renderer.
+ * @param {string} className - the grid class to inspect.
+ * @returns {string[]} the column keys, left to right.
+ */
+function columnKeys(renderer, gridClass) {
+  const grids = renderer.root.findAll(
+    (node) => typeof node.type === 'string' && String(node.props.className ?? '').split(' ').includes(gridClass),
+  )
+  assert.ok(grids.length > 0, `no rendered grid carries ${gridClass}`)
+  return grids[0]
+    .findAll((node) => node.props['data-column'] !== undefined, { deep: true })
+    .map((node) => node.props['data-column'])
+}
+
 /** The rendered process names, in render order. */
 function rowNames(renderer) {
   return renderer.root
@@ -146,7 +170,7 @@ test('a host without swap says so instead of drawing a zero ring', async (contex
   assert.equal(textsOf(renderer, 'dsh-perfmon-gaugeValue')[2], '—')
 })
 
-test('the process window offers the three tags and marks the active one', async (context) => {
+test('the three tags head the three columns, in the same order', async (context) => {
   const renderer = await mount(
     context,
     React.createElement(ProcessPanel, { reading: readingFixture(), sort: 'mem', onSortChange() {}, t }),
@@ -161,6 +185,14 @@ test('the process window offers the three tags and marks the active one', async 
     tags.map((tag) => tag.props['aria-pressed']),
     [false, true, false],
   )
+
+  // The complaint this guards: the tag order and the column order have to be the
+  // same list, or the header labels a column it does not sit above.
+  const headerColumns = columnKeys(renderer, 'dsh-perfmon-columns')
+  const rowColumns = columnKeys(renderer, 'dsh-perfmon-row')
+  assert.deepEqual(headerColumns, ['cpu', 'mem', 'name'])
+  assert.deepEqual(rowColumns, ['cpu', 'mem', 'name'])
+  assert.deepEqual(headerColumns, rowColumns)
 })
 
 test('picking the CPU or memory tag asks the host for that ordering', async (context) => {
@@ -276,4 +308,44 @@ test('the header control is labelled and opens the page', async (context) => {
 
 test('the route path the browser calls is the one the host registers', () => {
   assert.equal(SNAPSHOT_PATH, '/api/perfmon.snapshot')
+})
+
+test('the gauge value has room inside the ring it is centred in', () => {
+  // The reported defect: at the old 44px / 13px-text geometry the value was wider
+  // than the hole and drew over the ring. The budget is the widest realistic
+  // value on the per-core scale — "1024.0%" is about 41px at the 11px value font —
+  // plus a couple of pixels so it never touches the stroke.
+  const innerDiameter = (GAUGE_RING.radius - GAUGE_RING.stroke / 2) * 2
+  assert.ok(
+    innerDiameter >= 44,
+    `inner diameter ${String(innerDiameter)}px leaves no room for a four-digit percentage`,
+  )
+  assert.ok(
+    GAUGE_RING.size >= 2 * GAUGE_RING.radius + GAUGE_RING.stroke,
+    'the ring stroke must fit inside the svg box, or the arc is clipped',
+  )
+})
+
+test('the memory cell shows a whole-percent share beside the size', async (context) => {
+  const renderer = await mount(
+    context,
+    React.createElement(ProcessPanel, { reading: readingFixture(), sort: 'cpu', onSortChange() {}, t }),
+  )
+  // The header cell carries the same data-column, so match the metric cell itself.
+  const cells = renderer.root.findAll(
+    (node) =>
+      node.props['data-column'] === 'mem' &&
+      String(node.props.className ?? '').includes('dsh-perfmon-metric'),
+  )
+  assert.ok(cells.length > 0)
+  const shares = cells.map((cell) => {
+    const share = cell.findAll((node) => node.props.className === 'dsh-perfmon-metricShare')
+    assert.equal(share.length, 1, 'the share is its own element so it can be dropped when the column is tight')
+    return share[0].children.join('')
+  })
+  // Whole percent: the tenth of a percent is not worth the column width, so a
+  // 0.1% share reads 0% while the byte count beside it stays exact.
+  assert.deepEqual(shares, [' · 0%', ' · 25%'])
+  assert.equal(formatShare(4.4), '4%')
+  assert.equal(formatShare(null), '—')
 })

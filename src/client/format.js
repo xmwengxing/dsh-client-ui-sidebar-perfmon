@@ -43,6 +43,21 @@ export function formatPercent(value, empty = EMPTY) {
 }
 
 /**
+ * Format a share of a total for a table cell.
+ *
+ * Whole percent only: this figures sits beside a byte count in a fixed-width
+ * column, and the tenth of a percent it would cost is not worth the column width
+ * — the bar under the cell carries the finer reading anyway.
+ * @param {number | null | undefined} value - the percentage.
+ * @param {string} [empty] - text for a missing value.
+ * @returns {string} a whole-percent string, or the empty text.
+ */
+export function formatShare(value, empty = EMPTY) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return empty
+  return `${String(Math.round(value))}%`
+}
+
+/**
  * Format a duration in seconds as an uptime phrase.
  * @param {number | null | undefined} seconds - the duration.
  * @returns {string} a compact duration such as `3天 4小时`.
