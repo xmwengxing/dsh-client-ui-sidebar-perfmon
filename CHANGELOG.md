@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.2
+
+- **The three process columns are separated now.** They sat 8px apart with nothing
+  between them, so three numbers of different meaning read as one crowded block.
+  The gutters are twice as wide, a hairline runs down the boundary between columns
+  in the header and every row, and rows are separated too — a dense list needs the
+  eye guided across as well as down.
+- **Those dividers are drag handles.** Dragging the rule right of `CPU` or `内存`
+  widens that column; the name column takes what is left and never shrinks below a
+  72px floor. Double-click a divider to reset it to the shipped width, or focus it
+  and use the arrow keys (Shift for bigger steps, Home to reset) — the handle is a
+  real `role="separator"` with `aria-valuenow`, so it is not pointer-only.
+- The chosen widths are remembered per browser, and unreadable storage falls back
+  to the defaults instead of breaking the panel.
+
 ## 0.2.1
 
 - **The process filter now looks like the search field it always was.** It had

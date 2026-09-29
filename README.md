@@ -38,7 +38,10 @@ Session header:
     resource, highest first; `进程名` switches to an alphabetical listing. The two
     metric columns never shrink, while the name column takes the remaining width
     and truncates, so a narrow Sidebar loses names before it loses numbers and
-    the table never scrolls sideways.
+    the table never scrolls sideways. A hairline divides the columns and rows.
+    The divider beside `CPU` or `内存` is also a drag handle: drag to set that
+    column's width, double-click to reset it, or focus it and use the arrow keys
+    (Shift for larger steps, Home to reset). The widths are remembered per browser.
 - **Performance monitor** button — sits in the Session header's utilities row,
   immediately left of the Sidebar's own expand control, and opens (or focuses)
   the page.

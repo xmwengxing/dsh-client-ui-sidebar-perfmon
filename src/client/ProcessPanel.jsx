@@ -14,7 +14,7 @@
  * @module dsh-client-ui-sidebar-perfmon/ProcessPanel
  */
 
-import { createElement as h, useMemo, useState } from 'react'
+import { createElement as h, useEffect, useMemo, useRef, useState } from 'react'
 import { barWidth, EMPTY, formatBytes, formatPercent, formatShare } from './format.js'
 import { describeState } from './copy.js'
 
@@ -23,10 +23,76 @@ import { describeState } from './copy.js'
  * order of the columns they head.
  */
 export const SORT_TAGS = [
-  { id: 'cpu', label: 'tagCpu', arrow: '↓', hint: 'sortDesc' },
-  { id: 'mem', label: 'tagMem', arrow: '↓', hint: 'sortDesc' },
+  { id: 'cpu', label: 'tagCpu', arrow: '↓', hint: 'sortDesc', grip: 'resizeCpu' },
+  { id: 'mem', label: 'tagMem', arrow: '↓', hint: 'sortDesc', grip: 'resizeMem' },
   { id: 'name', label: 'tagName', arrow: '↑', hint: 'sortAsc' },
 ]
+
+/**
+ * Bounds for the two fixed tracks.
+ *
+ * The name column takes whatever is left, so these two are also what the drag
+ * handles move. `fallback` is the width the panel ships with and the width a
+ * reset returns to.
+ */
+export const COLUMN_LIMITS = {
+  cpu: { min: 40, max: 160, fallback: 54 },
+  mem: { min: 64, max: 220, fallback: 88 },
+}
+
+/** The name column never shrinks below this, so a drag cannot hide the identity. */
+const NAME_FLOOR = 72
+
+/** Where a reader's column widths are remembered, per browser. */
+const WIDTH_STORAGE_KEY = 'dsh-perfmon.columns.v1'
+
+/**
+ * Clamp one column width into its bounds.
+ * @param {'cpu' | 'mem'} which - the column.
+ * @param {unknown} value - a candidate width.
+ * @returns {number} a usable width in pixels.
+ */
+export function clampColumnWidth(which, value) {
+  const { min, max, fallback } = COLUMN_LIMITS[which]
+  const number = Number(value)
+  if (!Number.isFinite(number)) return fallback
+  return Math.min(Math.max(Math.round(number), min), max)
+}
+
+/** The widths the panel starts from. */
+function defaultWidths() {
+  return { cpu: COLUMN_LIMITS.cpu.fallback, mem: COLUMN_LIMITS.mem.fallback }
+}
+
+/**
+ * Read a reader's remembered widths.
+ *
+ * Storage is optional and can throw (private modes, a policy-disabled origin), so
+ * a failure returns the defaults rather than breaking the panel.
+ * @returns {{cpu: number, mem: number}} the widths to start from.
+ */
+export function readStoredWidths() {
+  try {
+    const raw = globalThis.localStorage?.getItem(WIDTH_STORAGE_KEY)
+    if (raw === null || raw === undefined) return defaultWidths()
+    const parsed = JSON.parse(raw)
+    return { cpu: clampColumnWidth('cpu', parsed?.cpu), mem: clampColumnWidth('mem', parsed?.mem) }
+  } catch {
+    return defaultWidths()
+  }
+}
+
+/**
+ * Remember the widths for the next visit.
+ * @param {{cpu: number, mem: number}} widths - the current widths.
+ */
+export function storeWidths(widths) {
+  try {
+    globalThis.localStorage?.setItem(WIDTH_STORAGE_KEY, JSON.stringify(widths))
+  } catch {
+    // A browser that refuses storage still gets working drag handles.
+  }
+}
 
 /**
  * One sortable column header.
@@ -37,8 +103,9 @@ export const SORT_TAGS = [
  * @param {object} props - the tag, its active state, and the handlers.
  * @returns {import('react').ReactNode} the header cell.
  */
-function ColumnHeader({ tag, active, onSortChange, t }) {
+function ColumnHeader({ tag, active, width, onSortChange, onGripPointerDown, onGripKeyDown, onGripReset, t }) {
   const right = tag.id !== 'name'
+  const grip = tag.grip === undefined ? null : COLUMN_LIMITS[tag.id]
   return h(
     'div',
     {
@@ -60,6 +127,32 @@ function ColumnHeader({ tag, active, onSortChange, t }) {
       t(tag.label),
       active ? h('span', { className: 'dsh-perfmon-tabArrow' }, tag.arrow) : null,
     ),
+    // The divider doubles as the handle: drag it to widen the column it closes,
+    // double-click or Home to return it to the shipped width, and the arrow keys
+    // move it for anyone not using a pointer.
+    grip === null
+      ? null
+      : h('span', {
+          className: 'dsh-perfmon-columnGrip',
+          role: 'separator',
+          'aria-orientation': 'vertical',
+          'aria-label': t(tag.grip),
+          'aria-valuenow': width,
+          'aria-valuemin': grip.min,
+          'aria-valuemax': grip.max,
+          title: t('resizeHint'),
+          tabIndex: 0,
+          'data-grip': tag.id,
+          onPointerDown: (event) => {
+            onGripPointerDown(tag.id, event)
+          },
+          onDoubleClick: () => {
+            onGripReset(tag.id)
+          },
+          onKeyDown: (event) => {
+            onGripKeyDown(tag.id, event)
+          },
+        }),
   )
 }
 
@@ -118,7 +211,78 @@ function MetricCell({ column, value, percent, tone, title }) {
  */
 export function ProcessPanel({ reading, sort, onSortChange, t }) {
   const [filter, setFilter] = useState('')
+  const [widths, setWidths] = useState(readStoredWidths)
   const processes = reading?.processes ?? []
+
+  // The drag listener lives outside React's render, so it reads the latest widths
+  // through a ref rather than capturing the ones in scope when it was installed.
+  const widthsRef = useRef(widths)
+  widthsRef.current = widths
+
+  /** Clamp a width against both its own bounds and the room the card has left. */
+  const fitWidth = (which, candidate, containerWidth) => {
+    const other = which === 'cpu' ? widthsRef.current.mem : widthsRef.current.cpu
+    const clamped = clampColumnWidth(which, candidate)
+    if (!Number.isFinite(containerWidth) || containerWidth <= 0) return clamped
+    // Two gutters and the card's own padding are not the columns' to spend.
+    const room = containerWidth - other - NAME_FLOOR - 48
+    return Math.max(COLUMN_LIMITS[which].min, Math.min(clamped, Math.floor(room)))
+  }
+
+  const setColumnWidth = (which, candidate, containerWidth) => {
+    const next = fitWidth(which, candidate, containerWidth)
+    setWidths((current) => (current[which] === next ? current : { ...current, [which]: next }))
+  }
+
+  const resetColumn = (which) => {
+    setWidths((current) => ({ ...current, [which]: COLUMN_LIMITS[which].fallback }))
+  }
+
+  const onGripPointerDown = (which, event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const card = event.currentTarget.closest('.dsh-perfmon-card--processes')
+    const containerWidth = card === null ? undefined : card.clientWidth
+    const startX = event.clientX
+    const startWidth = widthsRef.current[which]
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+
+    const onMove = (moveEvent) => {
+      setColumnWidth(which, startWidth + (moveEvent.clientX - startX), containerWidth)
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
+  const onGripKeyDown = (which, event) => {
+    const step = event.shiftKey ? 16 : 4
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      setColumnWidth(which, widthsRef.current[which] - step)
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      setColumnWidth(which, widthsRef.current[which] + step)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      resetColumn(which)
+    }
+  }
+
+  // Remember whatever the reader settled on — dragged, arrow-keyed or reset.
+  // The first render is skipped so mounting cannot overwrite a stored pair with
+  // the defaults, and a drag's many intermediate values cost one tiny write each.
+  const settled = useRef(false)
+  useEffect(() => {
+    if (!settled.current) {
+      settled.current = true
+      return
+    }
+    storeWidths(widths)
+  }, [widths])
 
   const rows = useMemo(() => {
     const needle = filter.trim().toLowerCase()
@@ -138,7 +302,14 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
 
   return h(
     'section',
-    { className: 'dsh-perfmon-card dsh-perfmon-card--processes', 'aria-label': t('processes') },
+    {
+      className: 'dsh-perfmon-card dsh-perfmon-card--processes',
+      'aria-label': t('processes'),
+      style: {
+        '--perfmon-cpu-column': `${String(widths.cpu)}px`,
+        '--perfmon-mem-column': `${String(widths.mem)}px`,
+      },
+    },
     h(
       'div',
       { className: 'dsh-perfmon-cardHead' },
@@ -149,7 +320,17 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
       'div',
       { className: 'dsh-perfmon-columns', role: 'row', 'aria-label': t('processes') },
       SORT_TAGS.map((tag) =>
-        h(ColumnHeader, { key: tag.id, tag, active: sort === tag.id, onSortChange, t }),
+        h(ColumnHeader, {
+          key: tag.id,
+          tag,
+          active: sort === tag.id,
+          width: tag.id === 'name' ? undefined : widths[tag.id],
+          onSortChange,
+          onGripPointerDown,
+          onGripKeyDown,
+          onGripReset: resetColumn,
+          t,
+        }),
       ),
     ),
     // A bordered field with its own magnifier and clear control. The previous

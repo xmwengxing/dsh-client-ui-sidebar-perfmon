@@ -58,6 +58,9 @@ var ZH = {
   sortAsc: "\u5347\u5E8F",
   filterPlaceholder: "\u641C\u7D22\u8FDB\u7A0B\u540D\u6216 PID",
   clearFilter: "\u6E05\u7A7A\u641C\u7D22",
+  resizeCpu: "\u8C03\u6574 CPU \u5217\u5BBD",
+  resizeMem: "\u8C03\u6574\u5185\u5B58\u5217\u5BBD",
+  resizeHint: "\u62D6\u52A8\u8C03\u6574\u5217\u5BBD \xB7 \u53CC\u51FB\u590D\u4F4D",
   processCount: "\u5171 {count} \u4E2A\u8FDB\u7A0B",
   showingRows: "\u663E\u793A {shown} \u884C",
   threads: "{count} \u7EBF\u7A0B",
@@ -124,6 +127,9 @@ var EN = {
   sortAsc: "ascending",
   filterPlaceholder: "Search by name or PID",
   clearFilter: "Clear search",
+  resizeCpu: "Resize the CPU column",
+  resizeMem: "Resize the memory column",
+  resizeHint: "Drag to resize \xB7 double-click to reset",
   processCount: "{count} processes",
   showingRows: "showing {shown}",
   threads: "{count} threads",
@@ -315,6 +321,10 @@ var STYLES = `
    of the column it orders. The two metric columns are sized to their widest real
    content ("1024.0%" and "999.9 MB \xB7 99%") and never shrink; the name column
    takes the remainder and truncates. */
+/* The three tracks. The two fixed ones are resizable through the grips in the
+   header; the name track takes whatever is left. The gutter is padding inside the
+   cells rather than a grid gap, so the divider between two columns can sit exactly
+   on their boundary. */
 .dsh-perfmon-columns,
 .dsh-perfmon-row {
   display: grid;
@@ -323,17 +333,71 @@ var STYLES = `
     var(--perfmon-mem-column, 88px)
     minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 0;
+  padding-inline: 4px;
+}
+
+/* A hairline on every cell but the last: that is what turns three cramped
+   numbers into three readable columns at any width. */
+.dsh-perfmon-columns > *:not(:last-child),
+.dsh-perfmon-row > *:not(:last-child) {
+  border-inline-end: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.22));
+}
+
+.dsh-perfmon-columns > *,
+.dsh-perfmon-row > * {
+  padding-inline: 8px;
 }
 
 .dsh-perfmon-columns {
-  padding: 8px 12px 4px;
+  padding-block: 8px 4px;
+}
+
+/* Rows are separated too: a dense list needs the reader's eye guided across, not
+   just down. */
+.dsh-perfmon-row + .dsh-perfmon-row {
+  border-block-start: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.16));
 }
 
 .dsh-perfmon-column {
+  position: relative;
   display: flex;
   align-items: center;
   min-inline-size: 0;
+}
+
+/* The divider's hit area. It sits inside the gutter on both sides so it never
+   covers the header text, and it is tall enough to grab without aiming. */
+.dsh-perfmon-columnGrip {
+  position: absolute;
+  inset-block: -3px;
+  inset-inline-end: -7px;
+  inline-size: 14px;
+  z-index: 1;
+  border-radius: 2px;
+  cursor: col-resize;
+  touch-action: none;
+  outline-offset: 1px;
+}
+
+.dsh-perfmon-columnGrip::after {
+  content: '';
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: 6px;
+  inline-size: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+
+.dsh-perfmon-columnGrip:hover::after,
+.dsh-perfmon-columnGrip:focus-visible::after,
+.dsh-perfmon-columnGrip:active::after {
+  background: var(--dsw-alias-brand-primary, #4f6ef7);
+}
+
+.dsh-perfmon-columnGrip:focus-visible {
+  outline: 2px solid var(--dsw-focus-ring-color, rgba(79, 110, 247, 0.5));
 }
 
 .dsh-perfmon-column--end {
@@ -469,11 +533,11 @@ var STYLES = `
      what produced a horizontal scrollbar. The tracks are sized so nothing
      overflows, and this keeps either axis from ever appearing. */
   overflow-x: hidden;
-  padding: 4px 6px 6px;
+  padding: 4px 0 6px;
 }
 
 .dsh-perfmon-row {
-  padding: 5px 6px;
+  padding-block: 5px;
   border-radius: var(--dsw-radius-sm, 6px);
 }
 
@@ -846,12 +910,44 @@ function GaugePanel({ reading, t }) {
 // src/client/ProcessPanel.jsx
 var import_react2 = require("react");
 var SORT_TAGS = [
-  { id: "cpu", label: "tagCpu", arrow: "\u2193", hint: "sortDesc" },
-  { id: "mem", label: "tagMem", arrow: "\u2193", hint: "sortDesc" },
+  { id: "cpu", label: "tagCpu", arrow: "\u2193", hint: "sortDesc", grip: "resizeCpu" },
+  { id: "mem", label: "tagMem", arrow: "\u2193", hint: "sortDesc", grip: "resizeMem" },
   { id: "name", label: "tagName", arrow: "\u2191", hint: "sortAsc" }
 ];
-function ColumnHeader({ tag, active, onSortChange, t }) {
+var COLUMN_LIMITS = {
+  cpu: { min: 40, max: 160, fallback: 54 },
+  mem: { min: 64, max: 220, fallback: 88 }
+};
+var NAME_FLOOR = 72;
+var WIDTH_STORAGE_KEY = "dsh-perfmon.columns.v1";
+function clampColumnWidth(which, value) {
+  const { min, max, fallback } = COLUMN_LIMITS[which];
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(Math.max(Math.round(number), min), max);
+}
+function defaultWidths() {
+  return { cpu: COLUMN_LIMITS.cpu.fallback, mem: COLUMN_LIMITS.mem.fallback };
+}
+function readStoredWidths() {
+  try {
+    const raw = globalThis.localStorage?.getItem(WIDTH_STORAGE_KEY);
+    if (raw === null || raw === void 0) return defaultWidths();
+    const parsed = JSON.parse(raw);
+    return { cpu: clampColumnWidth("cpu", parsed?.cpu), mem: clampColumnWidth("mem", parsed?.mem) };
+  } catch {
+    return defaultWidths();
+  }
+}
+function storeWidths(widths) {
+  try {
+    globalThis.localStorage?.setItem(WIDTH_STORAGE_KEY, JSON.stringify(widths));
+  } catch {
+  }
+}
+function ColumnHeader({ tag, active, width, onSortChange, onGripPointerDown, onGripKeyDown, onGripReset, t }) {
   const right = tag.id !== "name";
+  const grip = tag.grip === void 0 ? null : COLUMN_LIMITS[tag.id];
   return (0, import_react2.createElement)(
     "div",
     {
@@ -872,7 +968,31 @@ function ColumnHeader({ tag, active, onSortChange, t }) {
       },
       t(tag.label),
       active ? (0, import_react2.createElement)("span", { className: "dsh-perfmon-tabArrow" }, tag.arrow) : null
-    )
+    ),
+    // The divider doubles as the handle: drag it to widen the column it closes,
+    // double-click or Home to return it to the shipped width, and the arrow keys
+    // move it for anyone not using a pointer.
+    grip === null ? null : (0, import_react2.createElement)("span", {
+      className: "dsh-perfmon-columnGrip",
+      role: "separator",
+      "aria-orientation": "vertical",
+      "aria-label": t(tag.grip),
+      "aria-valuenow": width,
+      "aria-valuemin": grip.min,
+      "aria-valuemax": grip.max,
+      title: t("resizeHint"),
+      tabIndex: 0,
+      "data-grip": tag.id,
+      onPointerDown: (event) => {
+        onGripPointerDown(tag.id, event);
+      },
+      onDoubleClick: () => {
+        onGripReset(tag.id);
+      },
+      onKeyDown: (event) => {
+        onGripKeyDown(tag.id, event);
+      }
+    })
   );
 }
 function SearchIcon() {
@@ -911,7 +1031,63 @@ function MetricCell({ column, value, percent, tone, title }) {
 }
 function ProcessPanel({ reading, sort, onSortChange, t }) {
   const [filter, setFilter] = (0, import_react2.useState)("");
+  const [widths, setWidths] = (0, import_react2.useState)(readStoredWidths);
   const processes = reading?.processes ?? [];
+  const widthsRef = (0, import_react2.useRef)(widths);
+  widthsRef.current = widths;
+  const fitWidth = (which, candidate, containerWidth) => {
+    const other = which === "cpu" ? widthsRef.current.mem : widthsRef.current.cpu;
+    const clamped = clampColumnWidth(which, candidate);
+    if (!Number.isFinite(containerWidth) || containerWidth <= 0) return clamped;
+    const room = containerWidth - other - NAME_FLOOR - 48;
+    return Math.max(COLUMN_LIMITS[which].min, Math.min(clamped, Math.floor(room)));
+  };
+  const setColumnWidth = (which, candidate, containerWidth) => {
+    const next = fitWidth(which, candidate, containerWidth);
+    setWidths((current) => current[which] === next ? current : { ...current, [which]: next });
+  };
+  const resetColumn = (which) => {
+    setWidths((current) => ({ ...current, [which]: COLUMN_LIMITS[which].fallback }));
+  };
+  const onGripPointerDown = (which, event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const card = event.currentTarget.closest(".dsh-perfmon-card--processes");
+    const containerWidth = card === null ? void 0 : card.clientWidth;
+    const startX = event.clientX;
+    const startWidth = widthsRef.current[which];
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const onMove = (moveEvent) => {
+      setColumnWidth(which, startWidth + (moveEvent.clientX - startX), containerWidth);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+  const onGripKeyDown = (which, event) => {
+    const step = event.shiftKey ? 16 : 4;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setColumnWidth(which, widthsRef.current[which] - step);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setColumnWidth(which, widthsRef.current[which] + step);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      resetColumn(which);
+    }
+  };
+  const settled = (0, import_react2.useRef)(false);
+  (0, import_react2.useEffect)(() => {
+    if (!settled.current) {
+      settled.current = true;
+      return;
+    }
+    storeWidths(widths);
+  }, [widths]);
   const rows = (0, import_react2.useMemo)(() => {
     const needle = filter.trim().toLowerCase();
     if (needle === "") return processes;
@@ -926,7 +1102,14 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
   ].filter((part) => part !== void 0).join(" \xB7 ");
   return (0, import_react2.createElement)(
     "section",
-    { className: "dsh-perfmon-card dsh-perfmon-card--processes", "aria-label": t("processes") },
+    {
+      className: "dsh-perfmon-card dsh-perfmon-card--processes",
+      "aria-label": t("processes"),
+      style: {
+        "--perfmon-cpu-column": `${String(widths.cpu)}px`,
+        "--perfmon-mem-column": `${String(widths.mem)}px`
+      }
+    },
     (0, import_react2.createElement)(
       "div",
       { className: "dsh-perfmon-cardHead" },
@@ -937,7 +1120,17 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
       "div",
       { className: "dsh-perfmon-columns", role: "row", "aria-label": t("processes") },
       SORT_TAGS.map(
-        (tag) => (0, import_react2.createElement)(ColumnHeader, { key: tag.id, tag, active: sort === tag.id, onSortChange, t })
+        (tag) => (0, import_react2.createElement)(ColumnHeader, {
+          key: tag.id,
+          tag,
+          active: sort === tag.id,
+          width: tag.id === "name" ? void 0 : widths[tag.id],
+          onSortChange,
+          onGripPointerDown,
+          onGripKeyDown,
+          onGripReset: resetColumn,
+          t
+        })
       )
     ),
     // A bordered field with its own magnifier and clear control. The previous

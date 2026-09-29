@@ -9,7 +9,13 @@
  */
 
 export { PerfmonBody } from '../../src/client/PerfmonBody.jsx'
-export { ProcessPanel, SORT_TAGS } from '../../src/client/ProcessPanel.jsx'
+export {
+  ProcessPanel,
+  SORT_TAGS,
+  COLUMN_LIMITS,
+  clampColumnWidth,
+  readStoredWidths,
+} from '../../src/client/ProcessPanel.jsx'
 export { GaugePanel, GAUGE_RING } from '../../src/client/GaugePanel.jsx'
 export { HeaderButton } from '../../src/client/HeaderButton.jsx'
 export { PerfmonIcon } from '../../src/client/Icon.jsx'

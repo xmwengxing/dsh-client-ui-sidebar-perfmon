@@ -130,6 +130,10 @@ export const STYLES = `
    of the column it orders. The two metric columns are sized to their widest real
    content ("1024.0%" and "999.9 MB · 99%") and never shrink; the name column
    takes the remainder and truncates. */
+/* The three tracks. The two fixed ones are resizable through the grips in the
+   header; the name track takes whatever is left. The gutter is padding inside the
+   cells rather than a grid gap, so the divider between two columns can sit exactly
+   on their boundary. */
 .dsh-perfmon-columns,
 .dsh-perfmon-row {
   display: grid;
@@ -138,17 +142,71 @@ export const STYLES = `
     var(--perfmon-mem-column, 88px)
     minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 0;
+  padding-inline: 4px;
+}
+
+/* A hairline on every cell but the last: that is what turns three cramped
+   numbers into three readable columns at any width. */
+.dsh-perfmon-columns > *:not(:last-child),
+.dsh-perfmon-row > *:not(:last-child) {
+  border-inline-end: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.22));
+}
+
+.dsh-perfmon-columns > *,
+.dsh-perfmon-row > * {
+  padding-inline: 8px;
 }
 
 .dsh-perfmon-columns {
-  padding: 8px 12px 4px;
+  padding-block: 8px 4px;
+}
+
+/* Rows are separated too: a dense list needs the reader's eye guided across, not
+   just down. */
+.dsh-perfmon-row + .dsh-perfmon-row {
+  border-block-start: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.16));
 }
 
 .dsh-perfmon-column {
+  position: relative;
   display: flex;
   align-items: center;
   min-inline-size: 0;
+}
+
+/* The divider's hit area. It sits inside the gutter on both sides so it never
+   covers the header text, and it is tall enough to grab without aiming. */
+.dsh-perfmon-columnGrip {
+  position: absolute;
+  inset-block: -3px;
+  inset-inline-end: -7px;
+  inline-size: 14px;
+  z-index: 1;
+  border-radius: 2px;
+  cursor: col-resize;
+  touch-action: none;
+  outline-offset: 1px;
+}
+
+.dsh-perfmon-columnGrip::after {
+  content: '';
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: 6px;
+  inline-size: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+
+.dsh-perfmon-columnGrip:hover::after,
+.dsh-perfmon-columnGrip:focus-visible::after,
+.dsh-perfmon-columnGrip:active::after {
+  background: var(--dsw-alias-brand-primary, #4f6ef7);
+}
+
+.dsh-perfmon-columnGrip:focus-visible {
+  outline: 2px solid var(--dsw-focus-ring-color, rgba(79, 110, 247, 0.5));
 }
 
 .dsh-perfmon-column--end {
@@ -284,11 +342,11 @@ export const STYLES = `
      what produced a horizontal scrollbar. The tracks are sized so nothing
      overflows, and this keeps either axis from ever appearing. */
   overflow-x: hidden;
-  padding: 4px 6px 6px;
+  padding: 4px 0 6px;
 }
 
 .dsh-perfmon-row {
-  padding: 5px 6px;
+  padding-block: 5px;
   border-radius: var(--dsw-radius-sm, 6px);
 }
 

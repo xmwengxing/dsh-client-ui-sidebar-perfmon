@@ -439,3 +439,96 @@ test('the filter is a search field with a magnifier, a clear control and Escape'
   })
   assert.equal(prevented, 1, 'Escape on an empty field must not be swallowed')
 })
+
+test('each fixed column is adjustable from a divider in the header', async (context) => {
+  const { COLUMN_LIMITS, readStoredWidths } = require(resolve(root, 'test/.build/components.cjs'))
+  // Stand in for the browser's storage, which is absent under Node.
+  const store = new Map()
+  globalThis.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+    removeItem: (key) => store.delete(key),
+  }
+  store.clear()
+
+  const renderer = await mount(
+    context,
+    React.createElement(ProcessPanel, { reading: readingFixture(), sort: 'cpu', onSortChange() {}, t }),
+  )
+
+  const grips = renderer.root.findAll((node) => node.props.role === 'separator')
+  assert.equal(grips.length, 2, 'the CPU and memory columns carry a divider; the name column does not')
+  assert.deepEqual(
+    grips.map((node) => node.props['data-grip']),
+    ['cpu', 'mem'],
+  )
+  for (const grip of grips) {
+    const which = grip.props['data-grip']
+    assert.equal(grip.props['aria-orientation'], 'vertical')
+    assert.equal(grip.props['aria-valuenow'], COLUMN_LIMITS[which].fallback)
+    assert.equal(grip.props['aria-valuemin'], COLUMN_LIMITS[which].min)
+    assert.equal(grip.props['aria-valuemax'], COLUMN_LIMITS[which].max)
+    assert.equal(grip.props.tabIndex, 0, 'the divider is reachable without a pointer')
+  }
+
+  // The widths reach the grid as custom properties on the card.
+  const card = renderer.root.find(
+    (node) => String(node.props.className ?? '').includes('dsh-perfmon-card--processes'),
+  )
+  assert.equal(card.props.style['--perfmon-cpu-column'], '54px')
+  assert.equal(card.props.style['--perfmon-mem-column'], '88px')
+
+  // Arrow keys move the divider, and Shift takes a bigger step.
+  const cpuGrip = () => renderer.root.findAll((node) => node.props['data-grip'] === 'cpu')[0]
+  const prevent = { preventDefault() {} }
+  await TestRenderer.act(async () => {
+    cpuGrip().props.onKeyDown({ key: 'ArrowRight', shiftKey: false, ...prevent })
+  })
+  assert.equal(cpuGrip().props['aria-valuenow'], 58)
+  await TestRenderer.act(async () => {
+    cpuGrip().props.onKeyDown({ key: 'ArrowLeft', shiftKey: true, ...prevent })
+  })
+  assert.equal(cpuGrip().props['aria-valuenow'], 42)
+
+  // Clamped at the bounds, however far the key repeats.
+  for (let i = 0; i < 20; i += 1) {
+    await TestRenderer.act(async () => {
+      cpuGrip().props.onKeyDown({ key: 'ArrowLeft', shiftKey: true, ...prevent })
+    })
+  }
+  assert.equal(cpuGrip().props['aria-valuenow'], COLUMN_LIMITS.cpu.min)
+
+  // Double-click returns that column to the shipped width.
+  await TestRenderer.act(async () => {
+    cpuGrip().props.onDoubleClick()
+  })
+  assert.equal(cpuGrip().props['aria-valuenow'], COLUMN_LIMITS.cpu.fallback)
+
+  // A width the reader chose is remembered for the next visit.
+  await TestRenderer.act(async () => {
+    cpuGrip().props.onKeyDown({ key: 'ArrowRight', shiftKey: true, ...prevent })
+  })
+  const stored = readStoredWidths()
+  assert.equal(stored.cpu, COLUMN_LIMITS.cpu.fallback + 16)
+  assert.equal(stored.mem, COLUMN_LIMITS.mem.fallback)
+
+  // And a stored pair is what the panel starts from next time.
+  store.set('dsh-perfmon.columns.v1', JSON.stringify({ cpu: 90, mem: 120 }))
+  const again = await mount(
+    context,
+    React.createElement(ProcessPanel, { reading: readingFixture(), sort: 'cpu', onSortChange() {}, t }),
+  )
+  const card2 = again.root.find(
+    (node) => String(node.props.className ?? '').includes('dsh-perfmon-card--processes'),
+  )
+  assert.equal(card2.props.style['--perfmon-cpu-column'], '90px')
+  assert.equal(card2.props.style['--perfmon-mem-column'], '120px')
+
+  // Corrupt storage must not break the panel.
+  store.set('dsh-perfmon.columns.v1', '{not json')
+  assert.deepEqual(readStoredWidths(), {
+    cpu: COLUMN_LIMITS.cpu.fallback,
+    mem: COLUMN_LIMITS.mem.fallback,
+  })
+  delete globalThis.localStorage
+})
