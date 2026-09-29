@@ -12,3 +12,7 @@ category: ui
 description:
   en: Host performance monitor in the right Sidebar — CPU, memory and swap gauges plus a process table sortable by CPU, memory or name, refreshed live on Linux, macOS and Windows.
   zh: 右侧栏主机性能监控——CPU、内存、交换内存仪表盘，以及可按 CPU、内存、进程名排序的进程列表，在 Linux、macOS、Windows 上实时刷新。
+# Optional prebuilt-tarball pointer: storefronts offer it instead of the
+# build-from-source command, so an install needs no pnpm build approval.
+# The asset name is deliberately version-free so `latest/download/` cannot rot.
+tarball: https://github.com/xmwengxing/dsh-client-ui-sidebar-perfmon/releases/latest/download/dsh-client-ui-sidebar-perfmon.tgz
