@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Performance Monitor",
+    "description": "Live CPU, memory and swap gauges plus a sortable process table in the right Sidebar."
+  }
+}

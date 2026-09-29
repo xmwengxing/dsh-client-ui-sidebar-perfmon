@@ -1,0 +1,5 @@
+# dsh 插件 bundle 层：由 `dsh plugin --profile <name> add <本包>` 读取并合并进目标 profile。
+# 宿主半边提供 /api/perfmon.snapshot 采集路由；浏览器半边由 package.json 的 dsh.client 清单加载。
+- insert:
+    - id: perfmon
+      name: '@xmwengxing/dsh-client-ui-sidebar-perfmon'
