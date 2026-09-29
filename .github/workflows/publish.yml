@@ -1,0 +1,94 @@
+# Publish on a version tag, using npm trusted publishing (OIDC).
+#
+# No token is stored anywhere: the runner exchanges a short-lived GitHub OIDC
+# token for the right to publish this one package, which also earns the package a
+# provenance attestation. That is why this workflow exists instead of a local
+# `npm publish` — a 2FA-enabled account cannot be published for by a machine, and
+# handing a machine the second factor is worse than automating the release.
+#
+# One-time setup on npmjs.com (package → Settings → Trusted Publisher → GitHub):
+#   repository: xmwengxing/dsh-client-ui-sidebar-perfmon
+#   workflow:   publish.yml
+#   environment: (leave blank)
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and pack, but do not publish'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # create the GitHub Release that carries the tarball
+  id-token: write # mint the OIDC token npm trusted publishing exchanges
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; Node 24 ships a suitable 11.x, and
+      # this keeps a runner image pinned to an older one from failing the release.
+      - run: npm install -g npm@latest
+      - run: npm --version
+
+      - run: npm ci
+
+      # Builds both halves and runs every spec, including the live Linux one.
+      - run: npm test
+
+      - name: Check the tag against the manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag v$tag does not match package.json version $pkg" >&2
+            exit 1
+          fi
+
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
+        run: npm publish --provenance --access public
+
+      # The plugin list points at a version-free asset name under
+      # releases/latest/download/, so the tarball is renamed before it is attached:
+      # a versioned filename would 404 the moment the next release landed.
+      - name: Pack the list's tarball
+        run: |
+          npm pack --pack-destination dist
+          mv dist/*.tgz dist/dsh-client-ui-sidebar-perfmon.tgz
+          ls -l dist
+
+      - name: Extract this version's changelog
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          awk -v ver="${GITHUB_REF_NAME#v}" '
+            $0 ~ "^## " ver "([^0-9.]|$)" { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > dist/notes.md
+          if [ ! -s dist/notes.md ]; then
+            echo "See CHANGELOG.md for what changed in ${GITHUB_REF_NAME}." > dist/notes.md
+          fi
+          head -n 5 dist/notes.md
+
+      - name: Attach the tarball to a Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "perfmon ${GITHUB_REF_NAME#v}" \
+            --notes-file dist/notes.md \
+            dist/dsh-client-ui-sidebar-perfmon.tgz
