@@ -56,7 +56,8 @@ var ZH = {
   tagName: "\u8FDB\u7A0B\u540D",
   sortDesc: "\u964D\u5E8F",
   sortAsc: "\u5347\u5E8F",
-  filterPlaceholder: "\u7B5B\u9009\u8FDB\u7A0B\u540D\u6216 PID",
+  filterPlaceholder: "\u641C\u7D22\u8FDB\u7A0B\u540D\u6216 PID",
+  clearFilter: "\u6E05\u7A7A\u641C\u7D22",
   processCount: "\u5171 {count} \u4E2A\u8FDB\u7A0B",
   showingRows: "\u663E\u793A {shown} \u884C",
   threads: "{count} \u7EBF\u7A0B",
@@ -121,7 +122,8 @@ var EN = {
   tagName: "Name",
   sortDesc: "descending",
   sortAsc: "ascending",
-  filterPlaceholder: "Filter by name or PID",
+  filterPlaceholder: "Search by name or PID",
+  clearFilter: "Clear search",
   processCount: "{count} processes",
   showingRows: "showing {shown}",
   threads: "{count} threads",
@@ -381,22 +383,81 @@ var STYLES = `
   color: var(--dsw-alias-label-tertiary, currentColor);
 }
 
+/* The search field: a bordered, filled control with its own magnifier and clear
+   button. It has to look like an input at a glance \u2014 the panel's own filter used
+   to be a bare underline that read as a static label. */
+.dsh-perfmon-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 12px 4px;
+  padding: 0 8px;
+  block-size: 26px;
+  min-block-size: 26px;
+  /* A flex item would otherwise shrink below its block-size when the card is
+     tight, which made the field 22px when empty and 26px once it had a clear
+     button \u2014 a visible jump. It is a fixed control, not a flexible one. */
+  flex: none;
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.3));
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, rgba(127, 127, 127, 0.06));
+  color: var(--dsw-alias-label-tertiary, currentColor);
+}
+
+.dsh-perfmon-search:focus-within {
+  border-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, rgba(79, 110, 247, 0.3));
+  color: var(--dsw-alias-label-secondary, currentColor);
+}
+
+.dsh-perfmon-searchIcon {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
 .dsh-perfmon-filter {
-  margin: 6px 12px 0;
+  flex: 1 1 auto;
+  min-inline-size: 0;
   font: inherit;
   font-size: 11px;
-  padding: 5px 0;
+  padding: 0;
   border: 0;
-  border-block-end: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
   background: transparent;
   color: var(--dsw-alias-label-primary, currentColor);
   outline: none;
-  inline-size: 100%;
-  box-sizing: border-box;
 }
 
 .dsh-perfmon-filter::placeholder {
   color: var(--dsw-alias-label-tertiary, currentColor);
+}
+
+/* The native search decoration would sit next to our own clear control. */
+.dsh-perfmon-filter::-webkit-search-cancel-button,
+.dsh-perfmon-filter::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dsh-perfmon-searchClear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, currentColor);
+  cursor: pointer;
+}
+
+.dsh-perfmon-searchClear:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.14));
+  color: var(--dsw-alias-label-primary, currentColor);
 }
 
 .dsh-perfmon-rows {
@@ -814,6 +875,21 @@ function ColumnHeader({ tag, active, onSortChange, t }) {
     )
   );
 }
+function SearchIcon() {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 12, height: 12, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", focusable: "false" },
+    (0, import_react2.createElement)("circle", { cx: 7, cy: 7, r: 4.25, stroke: "currentColor", strokeWidth: 1.4 }),
+    (0, import_react2.createElement)("path", { d: "M10.2 10.2 13.5 13.5", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" })
+  );
+}
+function ClearIcon() {
+  return (0, import_react2.createElement)(
+    "svg",
+    { width: 10, height: 10, viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", focusable: "false" },
+    (0, import_react2.createElement)("path", { d: "M4 4 12 12M12 4 4 12", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" })
+  );
+}
 function MetricCell({ column, value, percent, tone, title }) {
   return (0, import_react2.createElement)(
     "div",
@@ -864,16 +940,43 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
         (tag) => (0, import_react2.createElement)(ColumnHeader, { key: tag.id, tag, active: sort === tag.id, onSortChange, t })
       )
     ),
-    (0, import_react2.createElement)("input", {
-      className: "dsh-perfmon-filter",
-      type: "search",
-      value: filter,
-      placeholder: t("filterPlaceholder"),
-      "aria-label": t("filterPlaceholder"),
-      onChange: (event) => {
-        setFilter(event.target.value);
-      }
-    }),
+    // A bordered field with its own magnifier and clear control. The previous
+    // version was a bare underlined input, which read as a static label — the
+    // filter existed but nobody could see it was one.
+    (0, import_react2.createElement)(
+      "div",
+      { className: "dsh-perfmon-search" },
+      (0, import_react2.createElement)("span", { className: "dsh-perfmon-searchIcon" }, (0, import_react2.createElement)(SearchIcon, null)),
+      (0, import_react2.createElement)("input", {
+        className: "dsh-perfmon-filter",
+        type: "search",
+        value: filter,
+        placeholder: t("filterPlaceholder"),
+        "aria-label": t("filterPlaceholder"),
+        onChange: (event) => {
+          setFilter(event.target.value);
+        },
+        onKeyDown: (event) => {
+          if (event.key === "Escape" && filter !== "") {
+            event.preventDefault();
+            setFilter("");
+          }
+        }
+      }),
+      filter === "" ? null : (0, import_react2.createElement)(
+        "button",
+        {
+          type: "button",
+          className: "dsh-perfmon-searchClear",
+          "aria-label": t("clearFilter"),
+          title: t("clearFilter"),
+          onClick: () => {
+            setFilter("");
+          }
+        },
+        (0, import_react2.createElement)(ClearIcon, null)
+      )
+    ),
     (0, import_react2.createElement)(
       "div",
       { className: "dsh-perfmon-rows" },

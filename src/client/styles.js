@@ -198,22 +198,81 @@ export const STYLES = `
   color: var(--dsw-alias-label-tertiary, currentColor);
 }
 
+/* The search field: a bordered, filled control with its own magnifier and clear
+   button. It has to look like an input at a glance — the panel's own filter used
+   to be a bare underline that read as a static label. */
+.dsh-perfmon-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 12px 4px;
+  padding: 0 8px;
+  block-size: 26px;
+  min-block-size: 26px;
+  /* A flex item would otherwise shrink below its block-size when the card is
+     tight, which made the field 22px when empty and 26px once it had a clear
+     button — a visible jump. It is a fixed control, not a flexible one. */
+  flex: none;
+  box-sizing: border-box;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.3));
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, rgba(127, 127, 127, 0.06));
+  color: var(--dsw-alias-label-tertiary, currentColor);
+}
+
+.dsh-perfmon-search:focus-within {
+  border-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, rgba(79, 110, 247, 0.3));
+  color: var(--dsw-alias-label-secondary, currentColor);
+}
+
+.dsh-perfmon-searchIcon {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
 .dsh-perfmon-filter {
-  margin: 6px 12px 0;
+  flex: 1 1 auto;
+  min-inline-size: 0;
   font: inherit;
   font-size: 11px;
-  padding: 5px 0;
+  padding: 0;
   border: 0;
-  border-block-end: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
   background: transparent;
   color: var(--dsw-alias-label-primary, currentColor);
   outline: none;
-  inline-size: 100%;
-  box-sizing: border-box;
 }
 
 .dsh-perfmon-filter::placeholder {
   color: var(--dsw-alias-label-tertiary, currentColor);
+}
+
+/* The native search decoration would sit next to our own clear control. */
+.dsh-perfmon-filter::-webkit-search-cancel-button,
+.dsh-perfmon-filter::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dsh-perfmon-searchClear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, currentColor);
+  cursor: pointer;
+}
+
+.dsh-perfmon-searchClear:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.14));
+  color: var(--dsw-alias-label-primary, currentColor);
 }
 
 .dsh-perfmon-rows {

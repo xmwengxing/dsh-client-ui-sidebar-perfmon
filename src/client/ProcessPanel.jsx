@@ -63,6 +63,32 @@ function ColumnHeader({ tag, active, onSortChange, t }) {
   )
 }
 
+/**
+ * The search control's magnifier, drawn in `currentColor` so the field tints it
+ * from its own text colour rather than carrying a literal.
+ * @returns {import('react').ReactNode} a decorative glyph.
+ */
+function SearchIcon() {
+  return h(
+    'svg',
+    { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true', focusable: 'false' },
+    h('circle', { cx: 7, cy: 7, r: 4.25, stroke: 'currentColor', strokeWidth: 1.4 }),
+    h('path', { d: 'M10.2 10.2 13.5 13.5', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round' }),
+  )
+}
+
+/**
+ * The clear control shown once the field has content.
+ * @returns {import('react').ReactNode} a decorative glyph.
+ */
+function ClearIcon() {
+  return h(
+    'svg',
+    { width: 10, height: 10, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true', focusable: 'false' },
+    h('path', { d: 'M4 4 12 12M12 4 4 12', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }),
+  )
+}
+
 /** One cell showing a percentage with a proportional bar under it. */
 function MetricCell({ column, value, percent, tone, title }) {
   return h(
@@ -126,16 +152,45 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
         h(ColumnHeader, { key: tag.id, tag, active: sort === tag.id, onSortChange, t }),
       ),
     ),
-    h('input', {
-      className: 'dsh-perfmon-filter',
-      type: 'search',
-      value: filter,
-      placeholder: t('filterPlaceholder'),
-      'aria-label': t('filterPlaceholder'),
-      onChange: (event) => {
-        setFilter(event.target.value)
-      },
-    }),
+    // A bordered field with its own magnifier and clear control. The previous
+    // version was a bare underlined input, which read as a static label — the
+    // filter existed but nobody could see it was one.
+    h(
+      'div',
+      { className: 'dsh-perfmon-search' },
+      h('span', { className: 'dsh-perfmon-searchIcon' }, h(SearchIcon, null)),
+      h('input', {
+        className: 'dsh-perfmon-filter',
+        type: 'search',
+        value: filter,
+        placeholder: t('filterPlaceholder'),
+        'aria-label': t('filterPlaceholder'),
+        onChange: (event) => {
+          setFilter(event.target.value)
+        },
+        onKeyDown: (event) => {
+          if (event.key === 'Escape' && filter !== '') {
+            event.preventDefault()
+            setFilter('')
+          }
+        },
+      }),
+      filter === ''
+        ? null
+        : h(
+            'button',
+            {
+              type: 'button',
+              className: 'dsh-perfmon-searchClear',
+              'aria-label': t('clearFilter'),
+              title: t('clearFilter'),
+              onClick: () => {
+                setFilter('')
+              },
+            },
+            h(ClearIcon, null),
+          ),
+    ),
     h(
       'div',
       { className: 'dsh-perfmon-rows' },

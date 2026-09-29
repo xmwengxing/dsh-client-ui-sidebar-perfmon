@@ -384,3 +384,58 @@ test('a platform that cannot answer a field shows a dash, never a zero', async (
   // And the process table says it has nothing rather than looking merely empty.
   assert.deepEqual(textsOf(renderer, 'dsh-perfmon-empty'), ['没有读到进程信息'])
 })
+
+test('the filter is a search field with a magnifier, a clear control and Escape', async (context) => {
+  const renderer = await mount(
+    context,
+    React.createElement(ProcessPanel, { reading: readingFixture(), sort: 'cpu', onSortChange() {}, t }),
+  )
+
+  // It must be recognisable as a field: a wrapper carrying an icon and the input.
+  const field = renderer.root.find(
+    (node) => typeof node.type === 'string' && String(node.props.className ?? '').includes('dsh-perfmon-search'),
+  )
+  assert.ok(field, 'the search field wrapper is missing')
+  const icon = field.findAll((node) => node.props.className === 'dsh-perfmon-searchIcon')
+  assert.equal(icon.length, 1, 'the field carries a search icon')
+  const input = field.findByProps({ className: 'dsh-perfmon-filter' })
+  assert.equal(input.props.type, 'search')
+  assert.match(input.props.placeholder, /进程名/)
+
+  // No clear control while the field is empty.
+  const clearButton = () =>
+    renderer.root.findAll((node) => node.props.className === 'dsh-perfmon-searchClear')
+  assert.equal(clearButton().length, 0)
+
+  // Typing narrows the list and reveals the clear control.
+  await TestRenderer.act(async () => {
+    input.props.onChange({ target: { value: 'heavy-mem' } })
+  })
+  assert.deepEqual(rowNames(renderer), ['heavy-mem'])
+  assert.equal(clearButton().length, 1, 'the clear control appears with content')
+
+  // Clicking it restores the whole list.
+  await TestRenderer.act(async () => {
+    clearButton()[0].props.onClick()
+  })
+  assert.deepEqual(rowNames(renderer), ['heavy-cpu', 'heavy-mem'])
+  assert.equal(clearButton().length, 0)
+
+  // Escape clears a non-empty field, and is left alone when already empty.
+  await TestRenderer.act(async () => {
+    input.props.onChange({ target: { value: 'heavy' } })
+  })
+  assert.equal(rowNames(renderer).length, 2)
+  let prevented = 0
+  await TestRenderer.act(async () => {
+    input.props.onKeyDown({ key: 'Escape', preventDefault: () => { prevented += 1 } })
+  })
+  assert.equal(prevented, 1)
+  assert.equal(renderer.root.findByProps({ className: 'dsh-perfmon-filter' }).props.value, '')
+
+  const emptyInput = renderer.root.findByProps({ className: 'dsh-perfmon-filter' })
+  await TestRenderer.act(async () => {
+    emptyInput.props.onKeyDown({ key: 'Escape', preventDefault: () => { prevented += 1 } })
+  })
+  assert.equal(prevented, 1, 'Escape on an empty field must not be swallowed')
+})

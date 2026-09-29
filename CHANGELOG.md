@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1
+
+- **The process filter now looks like the search field it always was.** It had
+  existed since 0.1.0, but as a bare underlined input with a muted placeholder it
+  read as a static label — the feature was there and nobody could find it. It is
+  now a bordered, filled control with a magnifier, a clear button that appears
+  once there is text, a focus ring, and Escape to clear. The placeholder says
+  "搜索进程名或 PID" rather than "筛选…", because it is an invitation to type.
+- Fixed: the field shrank from 26px to 22px when empty and jumped back once the
+  clear button appeared, because a flex item shrinks below its block-size in a
+  tight card. Same class of bug as the resource card's earlier squeeze.
+
 ## 0.2.0
 
 Cross-platform support, plus correctness fixes the platform work uncovered.
