@@ -360,6 +360,14 @@ export const STYLES = `
   color: var(--dsw-alias-label-secondary, currentColor);
 }
 
+.dsh-perfmon-warningList {
+  margin: 4px 0 0;
+  padding-inline-start: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .dsh-perfmon-empty {
   padding: 18px 10px;
   text-align: center;

@@ -48,12 +48,16 @@ Polling pauses while the browser tab is hidden and resumes with a fresh reading.
 
 ## Requirements
 
-- **Linux.** The metrics come from `/proc`; another platform gets an explicit
-  "unsupported platform" notice rather than invented numbers.
+- **Linux, macOS or Windows.** Each platform gets its own reader; see
+  [Platform support](#platform-support) for exactly which figures each one can
+  answer.
 - **DeepSeek Harness `0.2.0-rc.1` or a compatible release.** The plugin registers
   into the right Sidebar's tab-type registry and the Conversation header's
   utilities seat, so it needs a profile that boots `@deepseek-ai/dsh-web-app`
   (the `web` profile does).
+
+No runtime dependencies: the host half uses `node:os` and each platform's own
+tools, and the browser half uses React, which the GUI already provides.
 
 ## Install
 
@@ -100,31 +104,61 @@ something else:
 - id: perfmon
   name: '@xmwengxing/dsh-client-ui-sidebar-perfmon'
   config:
-    refreshIntervalMs: 1000   # 500–60000; the cadence the panel polls at
+    refreshIntervalMs: 1000   # 500–60000; default 2000 Linux / 3000 macOS / 4000 Windows
     processLimit: 100         # 5–500; rows served per response
     cacheMillis: 800          # 0–10000; polls inside this window share one reading
     sampleMillis: 150         # 0–2000; length of the first reading's priming sample
 ```
 
-## How the numbers are produced
+## Platform support
 
-Everything is read from the kernel, so there is no sampling daemon and no
-privileged helper:
+One reader per platform family, each reading the platform's own source.
 
-| Reading | Source | Rule |
-| --- | --- | --- |
-| CPU % | `/proc/stat` | Busy jiffies over elapsed jiffies, between two samples. |
-| Per-core CPU % | `/proc/stat` | The same rule, per `cpuN` line. |
-| Memory % | `/proc/meminfo` | `(MemTotal - MemAvailable) / MemTotal`. Available, not free, because page cache is reclaimable. |
-| Swap % | `/proc/meminfo` | `(SwapTotal - SwapFree) / SwapTotal`. |
-| Process CPU % | `/proc/<pid>/stat` | `utime + stime` delta, scaled so **100% means one core** — the same convention as `top`, so an eight-thread process on four cores can read above 100%. |
-| Process memory | `/proc/<pid>/stat` | `rss` in pages, times the page size, as a share of `MemTotal`. |
+| | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| CPU %, per-core | `/proc/stat` | `os.cpus()` | `os.cpus()` |
+| Load average | yes | yes | **no** — Windows has no such concept, so the line is omitted |
+| Memory total / used / available | `/proc/meminfo` (`MemAvailable`) | `vm_stat` (free + reclaimable pages) | `Win32_OperatingSystem` + `AvailableBytes` |
+| Cache / buffers line | `Cached`, `Buffers` | file-backed pages as cache; no buffer figure | `CacheBytes`; no buffer figure |
+| Swap | `/proc/meminfo` | `sysctl vm.swapusage` | page file (`SizeStoredInPagingFiles`) |
+| Process list | `/proc/<pid>/stat`, in-process | `ps -Ao pid=,state=,time=,rss=,comm=` | one PowerShell call |
+| Process state | yes | yes | **no** — shown as `—` |
+| Thread count | yes | **no** — BSD `ps` has no portable keyword | yes |
 
-Because every percentage is a difference between two samples, the plugin never
-assumes the kernel's `USER_HZ`: the machine share is `busyΔ / totalΔ`, and a
-process's per-core share is `procΔ / totalΔ × coreCount`, which cancels the jiffy
-constant out. The first reading of a session is primed with a short second
-sample so the panel's first paint is a real percentage rather than a zero.
+Anything a platform cannot answer is reported as `null` and rendered as `—`, with
+the reason listed in the panel. Nothing is filled in with a zero, because a zero
+reads as a measurement.
+
+**Cost.** Linux reads `/proc` in-process and spawns nothing. macOS and Windows
+spawn one helper per sample, so their default refresh is calmer — 3s and 4s
+against Linux's 2s — and `refreshIntervalMs` overrides it.
+
+**A platform without a dedicated reader** (FreeBSD, Solaris, …) falls back to a
+`node:os`-only reader: a real CPU reading and a real memory total, with swap and
+the process table marked unavailable rather than guessed.
+
+### How the numbers are produced
+
+Every percentage is a difference between two samples of a cumulative counter, so
+the plugin never assumes a tick rate:
+
+| Reading | Rule |
+| --- | --- |
+| CPU % | Busy time over elapsed time, between two samples. |
+| Per-core CPU % | The same rule, per core. |
+| Memory % | `used / total`, where *used* means "not available" — page cache is reclaimable, so it counts as available, not as used. |
+| Swap % | `used / total`. |
+| Process CPU % | The process's CPU-time delta over the same interval, scaled so **100% means one core** — the `top` convention, so an eight-thread process on four cores can read above 100%. |
+| Process memory | Resident set as a share of total memory. |
+
+The one rule a reader must obey is *internal consistency*: a process's CPU time
+has to be in the same unit as that reader's CPU total. Linux reports both in
+jiffies, macOS and Windows both in milliseconds — so `busyΔ / totalΔ` and
+`procΔ / totalΔ × coreCount` cancel the unit out, and no `USER_HZ` is assumed
+anywhere.
+
+The first reading of a session is primed with a short second sample, so the
+panel's first paint carries a real percentage rather than a zero.
 
 Two states are reported honestly instead of as zero:
 
@@ -168,9 +202,13 @@ files. The route is protected by the same authentication as the rest of the GUI.
 
 ## Limitations
 
-- **Linux only.** macOS and Windows have no `/proc`; the panel says so.
 - **No per-process user, command line, or tree view.** Rows carry the process
   name, PID, state, thread count, CPU and RSS.
+- **macOS and Windows tests are parser tests.** The readers for those platforms are
+  covered by specs over captured tool output and injected failure paths, but they
+  have not been run on real macOS or Windows hardware by the author. Windows
+  process state and thread counts on macOS are unavailable by platform design, not
+  by omission.
 - **No history.** The panel shows the present reading; there are no sparklines or
   retained samples.
 - **Polling, not streaming.** Refresh is a request per interval rather than a
@@ -187,11 +225,15 @@ npm run watch        # rebuild on change
 npm test             # build both halves, then run every spec
 ```
 
-`npm test` covers the differencing arithmetic against hand-built samples, the
-panel's behavior (gauges, tags, sorting, filtering, refresh, errors) through
-`react-test-renderer`, the shipped bundle's registrations, and a
-**contract-currency** suite that re-reads the installed dsh packages to confirm
-the slot names, service names and route rule this plugin depends on.
+`npm test` covers the differencing arithmetic against hand-built samples, every
+platform parser against captured tool output (including the awkward shapes: a
+truncated `ps` time, a path with spaces, a `null` counter, a single JSON object
+where a list was expected), the readers' failure paths through an injected
+command runner, the panel's behavior (gauges, tags, sorting, filtering, refresh,
+errors, and an all-unavailable reading) through `react-test-renderer`, the shipped
+bundle's registrations, and a **contract-currency** suite that re-reads the
+installed dsh packages to confirm the slot names, service names and route rule
+this plugin depends on.
 
 There is also a browser check that drives a real Chromium over the DevTools
 protocol against a running instance:

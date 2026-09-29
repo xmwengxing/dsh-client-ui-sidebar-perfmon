@@ -56,6 +56,23 @@ const ZH = {
     I: '空闲',
     X: '已死',
   },
+  // 平台侧无法提供的字段一律显示这个，而不是 0。
+  unavailable: '—',
+  warnings: '部分指标不可用',
+  reader: {
+    linux: '读取 /proc',
+    darwin: '读取 ps / vm_stat',
+    win32: '读取 PowerShell',
+    generic: '仅标准库',
+  },
+  warning: {
+    'swap-unavailable': '本机未提供交换/页面文件用量',
+    'memory-unavailable': '内存信息不可用',
+    'processes-unavailable': '进程列表不可用',
+    'powershell-missing': '未找到 PowerShell，无法读取进程与内存',
+    'windows-json-unreadable': 'PowerShell 输出无法解析',
+    'generic-platform': '当前平台没有专用读取器，仅显示标准库能提供的数据',
+  },
 }
 
 const EN = {
@@ -105,6 +122,23 @@ const EN = {
     I: 'idle',
     X: 'dead',
   },
+  // Anything a platform cannot answer renders as this, never as a zero.
+  unavailable: '—',
+  warnings: 'Some metrics are unavailable',
+  reader: {
+    linux: 'reading /proc',
+    darwin: 'reading ps / vm_stat',
+    win32: 'reading PowerShell',
+    generic: 'standard library only',
+  },
+  warning: {
+    'swap-unavailable': 'This host reports no swap / page-file usage',
+    'memory-unavailable': 'Memory information is unavailable',
+    'processes-unavailable': 'The process list is unavailable',
+    'powershell-missing': 'PowerShell was not found, so processes and memory cannot be read',
+    'windows-json-unreadable': 'The PowerShell output could not be parsed',
+    'generic-platform': 'No dedicated reader for this platform; only standard-library figures are shown',
+  },
 }
 
 /**
@@ -139,6 +173,25 @@ export function createTranslator() {
       return value === undefined ? match : String(value)
     })
   }
+}
+
+/**
+ * Translate one host warning code.
+ *
+ * A reader may append detail after a colon (`processes-unavailable: ps: ...`); the
+ * prefix is what has a translation, and unknown codes are passed through so a new
+ * one shows up as itself rather than as a silent gap.
+ * @param {(key: string) => string} t - the translator.
+ * @param {string} code - the warning the host reported.
+ * @returns {string} the text to show.
+ */
+export function describeWarning(t, code) {
+  const prefix = code.split(':')[0].trim()
+  const dictionary = resolveLanguage() === 'zh' ? ZH.warning : EN.warning
+  const known = dictionary[prefix]
+  if (known === undefined) return code
+  const detail = code.slice(prefix.length + 1).trim()
+  return detail === '' ? known : `${known} (${detail})`
 }
 
 /** Process-state labels, keyed by the single-letter code in `/proc/<pid>/stat`. */

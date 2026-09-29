@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.0
+
+Cross-platform support, plus correctness fixes the platform work uncovered.
+
+- **macOS and Windows readers.** Linux keeps reading `/proc` in-process; macOS reads
+  `vm_stat` / `sysctl vm.swapusage` / `ps`, and Windows reads one PowerShell call per
+  sample covering memory, paging file and the whole process list. A platform with no
+  dedicated reader falls back to a `node:os`-only reading rather than failing.
+- **Platform-aware default cadence**: 2s on Linux (no subprocess), 3s on macOS and
+  4s on Windows, where each sample spawns a helper.
+- **`warnings` in the reading**, listed in the panel: a platform that cannot answer a
+  field says why instead of leaving a gap.
+- Removed the "unsupported platform" failure — every platform now gets a reading.
+- **`cpuTime` is unit-agnostic by contract.** A reader's per-process CPU time must be
+  in the same unit as that reader's CPU total (jiffies on Linux, milliseconds
+  elsewhere), which is what lets one derivation serve all three platforms.
+- **Unavailable is never zero.** An unreadable CPU counter, working set or memory
+  total is `null` and renders as `—`; previously a `null` from PowerShell became `0`,
+  which differenced into a confident and wrong 0%. Unavailable figures also sort last
+  rather than as the smallest value.
+- Fixed: a Windows process row with `Id: null` was kept as pid 0; a fractional
+  `vm.swapusage` byte count could be non-integer; memory that could not be read was
+  rendered as `0 B / 0 B`.
+- Tests: 49 specs, adding a spec per platform parser (awkward shapes included), the
+  readers' failure paths through an injected runner, and a live Linux check that a
+  process's CPU unit matches its total's.
+
 ## 0.1.0
 
 First release.
@@ -16,10 +43,7 @@ First release.
 - Fixed metric columns sized to their widest real content, with the name column
   taking the remainder: a narrow Sidebar truncates names instead of growing a
   horizontal scrollbar.
-- Gauge rings enlarged so the percentage sits clear of the stroke, on a visible
+- Gauge rings sized so the percentage sits clear of the stroke, on a visible
   track token rather than one that rendered as background.
 - Live refresh on a host-reported interval, paused while the browser tab is
   hidden.
-- Host half reads `/proc/stat`, `/proc/meminfo` and `/proc/<pid>/stat` and serves
-  one authenticated route on the shared `/api` channel, with a short server-side
-  cache so several open panels share one read.

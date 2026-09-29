@@ -41,10 +41,13 @@ CPU / 内存 / 交换内存仪表盘，以及可按 CPU、内存、进程名排�
 
 ## 环境要求
 
-- **Linux**。指标来自 `/proc`；其他平台会明确提示“不支持”，而不是编造数字。
+- **Linux / macOS / Windows**。每个平台各有专用读取器；各平台能提供哪些指标见
+  [平台支持](#平台支持)。
 - **DeepSeek Harness `0.2.0-rc.1` 或兼容版本**。插件注册到右侧栏的 tab 类型注册表
   与会话顶栏的工具栏席位，因此需要启动 `@deepseek-ai/dsh-web-app` 的 profile
   （`web` profile 即是）。
+
+无运行时依赖：宿主半边只用 `node:os` 与各平台自带工具，浏览器半边只用 GUI 已提供的 React。
 
 ## 安装
 
@@ -89,27 +92,54 @@ dsh --profile web --dump-config | grep -A2 perfmon
 - id: perfmon
   name: '@xmwengxing/dsh-client-ui-sidebar-perfmon'
   config:
-    refreshIntervalMs: 1000   # 500–60000，面板轮询间隔
+    refreshIntervalMs: 1000   # 500–60000，默认 Linux 2000 / macOS 3000 / Windows 4000
     processLimit: 100         # 5–500，单次返回的进程行数
     cacheMillis: 800          # 0–10000，该窗口内的轮询共享同一次读取
     sampleMillis: 150         # 0–2000，首次读数的预热采样时长
 ```
 
-## 数字是怎么来的
+## 平台支持
 
-全部读自内核，因此没有采样守护进程，也不需要特权辅助程序：
+每个平台族一个读取器，各自读该平台自己的数据源。
 
-| 指标 | 来源 | 规则 |
-| --- | --- | --- |
-| CPU 占用 | `/proc/stat` | 两次采样之间，忙 jiffies 占流逝 jiffies 的比例。 |
-| 单核占用 | `/proc/stat` | 同一规则，逐 `cpuN` 行计算。 |
-| 内存占用 | `/proc/meminfo` | `(MemTotal - MemAvailable) / MemTotal`。用 Available 而非 Free，因为页缓存可回收。 |
-| 交换内存占用 | `/proc/meminfo` | `(SwapTotal - SwapFree) / SwapTotal`。 |
-| 进程 CPU | `/proc/<pid>/stat` | `utime + stime` 的增量，按 **100% = 一个核心** 归一化——与 `top` 同一约定，因此 4 核机器上的 8 线程进程可能超过 100%。 |
-| 进程内存 | `/proc/<pid>/stat` | `rss`（页数）× 页大小，再除以 `MemTotal`。 |
+| | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| CPU 占用 / 单核 | `/proc/stat` | `os.cpus()` | `os.cpus()` |
+| 负载 | 有 | 有 | **无**——Windows 没有这个概念，该段直接省略 |
+| 内存 总量/已用/可用 | `/proc/meminfo`（`MemAvailable`） | `vm_stat`（free + 可回收页） | `Win32_OperatingSystem` + `AvailableBytes` |
+| 缓存 / 缓冲 | `Cached` / `Buffers` | 文件页作为缓存；无缓冲项 | `CacheBytes`；无缓冲项 |
+| 交换内存 | `/proc/meminfo` | `sysctl vm.swapusage` | 页面文件（`SizeStoredInPagingFiles`） |
+| 进程列表 | `/proc/<pid>/stat`，进程内读取 | `ps -Ao pid=,state=,time=,rss=,comm=` | 一次 PowerShell 调用 |
+| 进程状态 | 有 | 有 | **无**——显示为 `—` |
+| 线程数 | 有 | **无**——BSD `ps` 没有可移植的线程数字段 | 有 |
 
-由于所有百分比都是两次采样之差，插件不需要假设内核的 `USER_HZ`：整机占比是
-`忙Δ / 总Δ`，进程的单核占比是 `进程Δ / 总Δ × 核心数`，jiffy 常量在约分中消掉。
+平台无法提供的字段一律上报 `null` 并在面板显示 `—`，同时在面板中列出原因。
+任何字段都不会用 0 顶替——因为 0 看起来像一次真实测量。
+
+**开销**：Linux 全部在进程内读 `/proc`，不启动任何子进程；macOS 与 Windows 每次采样
+启动一个辅助进程，因此默认刷新间隔更保守——分别是 3 秒与 4 秒（Linux 为 2 秒），
+可用 `refreshIntervalMs` 覆盖。
+
+**没有专用读取器的平台**（FreeBSD、Solaris 等）回退到只用 `node:os` 的读取器：
+真实的 CPU 读数与内存总量，交换内存与进程列表标记为不可用，而不是猜测。
+
+### 数字是怎么来的
+
+所有百分比都是同一累计计数器的两次采样之差，因此插件从不假设时钟节拍：
+
+| 指标 | 规则 |
+| --- | --- |
+| CPU 占用 | 两次采样之间，忙时间占流逝时间的比例。 |
+| 单核占用 | 同一规则，逐核心计算。 |
+| 内存占用 | `已用 / 总量`，其中“已用”指“不可用”——页缓存可回收，因此计入可用而非已用。 |
+| 交换内存占用 | `已用 / 总量`。 |
+| 进程 CPU | 同一区间内该进程 CPU 时间的增量，按 **100% = 一个核心** 归一化——与 `top` 同一约定，因此 4 核机器上的 8 线程进程可能超过 100%。 |
+| 进程内存 | 常驻集大小占总内存的比例。 |
+
+读取器唯一必须遵守的规则是**单位自洽**：进程 CPU 时间必须与该读取器自己的 CPU 总量
+同单位。Linux 两边都是 jiffies，macOS 与 Windows 两边都是毫秒——于是
+`忙Δ / 总Δ` 与 `进程Δ / 总Δ × 核心数` 把单位约掉，任何地方都不需要假设 `USER_HZ`。
+
 每次会话的第一次读数会用一次短采样预热，因此面板首帧显示的就是真实百分比而非 0。
 
 有两种状态会如实呈现，而不是显示为 0：
@@ -147,8 +177,10 @@ dsh --profile web --dump-config | grep -A2 perfmon
 
 ## 已知限制
 
-- **仅 Linux**。macOS 与 Windows 没有 `/proc`，面板会明确说明。
 - **没有进程属主、命令行与进程树**。每行包含进程名、PID、状态、线程数、CPU 与 RSS。
+- **macOS 与 Windows 部分仅有解析器测试**。这两个平台的读取器由「抓取的工具输出样本 +
+  注入的失败路径」覆盖，但作者未在真实 macOS / Windows 硬件上运行过。Windows 的进程状态、
+  macOS 的线程数是平台本身不提供，而非实现遗漏。
 - **没有历史数据**。面板只显示当前读数，没有迷你趋势图或留存采样。
 - **轮询而非推流**。刷新是按间隔请求，而非服务端推送。
 - **顶栏按钮只负责打开，不负责切换**。关闭面板由右侧栏自身的控件完成。

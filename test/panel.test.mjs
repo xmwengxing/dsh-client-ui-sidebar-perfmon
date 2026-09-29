@@ -349,3 +349,38 @@ test('the memory cell shows a whole-percent share beside the size', async (conte
   assert.equal(formatShare(4.4), '4%')
   assert.equal(formatShare(null), '—')
 })
+
+test('a platform that cannot answer a field shows a dash, never a zero', async (context) => {
+  // The shape a Windows host produces when PowerShell is unavailable: a real CPU
+  // reading from node:os, no memory, no processes, and a warning that says so.
+  const reading = readingFixture({
+    facts: { hostname: 'PC', platform: 'win32', platformLabel: 'Windows', arch: 'x64', coreCount: 8, uptimeSeconds: 3600 },
+    cpu: { percent: 12.5, coreCount: 8, cores: [], loadAverage: null },
+    // The host sends null, not a shape full of zeroes, when the reader could not
+    // read memory at all.
+    memory: null,
+    processes: [],
+    processCount: 0,
+    warnings: ['powershell-missing', 'swap-unavailable'],
+  })
+  const renderer = await mount(context, React.createElement(PerfmonBody, { t, load: async () => reading }))
+  await TestRenderer.act(async () => {})
+
+  const details = textsOf(renderer, 'dsh-perfmon-gaugeDetail')
+  assert.equal(details[0], '8 核', 'a platform with no load average shows the core count alone')
+  assert.equal(details[1], '—', 'unreadable memory is one dash, not "0 B / 0 B"')
+  assert.equal(details[2], '—', 'unreadable swap is unknown, not "not enabled"')
+
+  // The platform is named in the header, and the warnings are listed, translated.
+  const meta = textsOf(renderer, 'dsh-perfmon-cardMeta')[0]
+  assert.match(meta, /Windows/)
+  const warningItems = renderer.root.findAll(
+    (node) => node.type === 'li' && typeof node.children[0] === 'string',
+  )
+  const warningText = warningItems.map((node) => node.children.join(''))
+  assert.ok(warningText.some((line) => line.includes('PowerShell')))
+  assert.ok(warningText.some((line) => line.includes('交换')))
+
+  // And the process table says it has nothing rather than looking merely empty.
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-empty'), ['没有读到进程信息'])
+})

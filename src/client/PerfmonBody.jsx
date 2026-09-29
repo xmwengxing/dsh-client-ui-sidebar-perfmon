@@ -16,6 +16,7 @@ import { fetchSnapshot } from './api.js'
 import { GaugePanel } from './GaugePanel.jsx'
 import { ProcessPanel } from './ProcessPanel.jsx'
 import { formatClock } from './format.js'
+import { describeWarning } from './copy.js'
 
 /** Fallback cadence when the host has not reported one yet. */
 const DEFAULT_INTERVAL_MS = 2000
@@ -151,6 +152,22 @@ export function PerfmonBody({ t, load = fetchSnapshot }) {
       ? h('div', { className: 'dsh-perfmon-empty' }, t('loading'))
       : null,
     reading === undefined ? null : h(GaugePanel, { reading, t }),
+    // A platform that cannot answer a field says so here rather than leaving the
+    // panel silently short of a number.
+    Array.isArray(reading?.warnings) && reading.warnings.length > 0
+      ? h(
+          'div',
+          { className: 'dsh-perfmon-notice dsh-perfmon-notice--muted' },
+          h('div', null, t('warnings')),
+          h(
+            'ul',
+            { className: 'dsh-perfmon-warningList' },
+            reading.warnings.map((code) =>
+              h('li', { key: code }, describeWarning(t, String(code))),
+            ),
+          ),
+        )
+      : null,
     reading === undefined ? null : h(ProcessPanel, { reading, sort, onSortChange: setSort, t }),
     h(
       'div',

@@ -11,7 +11,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 // A same-package spec reads the internals directly; the published host face
 // exports only the plugin's own `apply`/`inject`/`name`.
-import { collect, derive, hostFacts, sortProcesses, createSampler } from '../src/host/metrics.js'
+import { derive, hostFacts, sortProcesses, createSampler } from '../src/host/metrics.js'
+import { linuxReader } from '../src/host/readers/linux.js'
 
 /** A raw sample with a chosen CPU/memory story and a chosen process list. */
 function sampleFixture({ at, total, idle, processes }) {
@@ -42,7 +43,9 @@ function sampleFixture({ at, total, idle, processes }) {
 
 /** One raw process row, in the shape the `/proc` reader produces. */
 function processFixture(pid, name, utime, stime, rssBytes) {
-  return { pid, name, state: 'S', threads: 1, utime, stime, rssBytes }
+  // Linux counts CPU in jiffies; readers on other platforms fold their own unit
+  // into `cpuTime`, and the derivation only ever differences it.
+  return { pid, name, state: 'S', threads: 1, cpuTime: utime + stime, rssBytes }
 }
 
 test('the machine percentage is the busy share of the elapsed jiffies', () => {
@@ -122,8 +125,8 @@ test('a process with no reading sorts last rather than first', () => {
   assert.deepEqual(sortProcesses(processes, 'cpu', 2).map((p) => p.pid), [2, 1])
 })
 
-test('the live collector reads this kernel and the sampler serves it', { skip: process.platform !== 'linux' }, async () => {
-  const sample = await collect()
+test('the live Linux reader feeds the sampler', { skip: process.platform !== 'linux' }, async () => {
+  const sample = await linuxReader.sample()
   assert.ok(sample.cpu.aggregate.total > 0, '/proc/stat must report jiffies')
   assert.ok(sample.cpu.cores.length > 0, '/proc/stat must report at least one core')
   assert.ok(sample.memory.total > 0, '/proc/meminfo must report a total')
@@ -133,7 +136,7 @@ test('the live collector reads this kernel and the sampler serves it', { skip: p
   assert.ok(first.name.length > 0)
   assert.ok(first.rssBytes >= 0)
 
-  const sampler = createSampler({ sampleMillis: 50 })
+  const sampler = createSampler({ sampleMillis: 50, reader: linuxReader })
   const reading = await sampler.snapshot({ sort: 'mem', limit: 3 })
   assert.equal(reading.processes.length, 3)
   assert.equal(reading.sort, 'mem')
@@ -151,4 +154,89 @@ test('the host facts describe this machine', { skip: process.platform !== 'linux
   assert.ok(facts.coreCount > 0)
   assert.ok(facts.uptimeSeconds > 0)
   assert.equal(facts.loadAverage.length, 3)
+})
+
+test('a reader with unavailable fields still produces a usable reading', () => {
+  // Exactly the shape the Windows reader returns on a host where a process could
+  // not be inspected: no state, no thread count, no CPU time, no working set.
+  const before = sampleFixture({
+    at: 0,
+    total: 1000,
+    idle: 800,
+    processes: [
+      { pid: 4, name: 'System', state: null, threads: null, cpuTime: null, rssBytes: null },
+    ],
+  })
+  const after = sampleFixture({
+    at: 2000,
+    total: 2000,
+    idle: 1200,
+    processes: [
+      { pid: 4, name: 'System', state: null, threads: null, cpuTime: null, rssBytes: null },
+    ],
+  })
+  const reading = derive(before, after)
+  const row = reading.processes[0]
+  assert.equal(row.cpuPercent, null, 'an unreadable CPU time is unknown, not 0%')
+  assert.equal(row.rssBytes, null, 'an unreadable working set is unknown, not 0 bytes')
+  assert.equal(row.memPercent, null)
+  assert.equal(row.state, null)
+  assert.equal(row.threads, null)
+  // And the machine reading is unaffected by the missing per-process figures:
+  // 1000 jiffies elapsed with 400 idle is 60% busy.
+  assert.equal(reading.cpu.percent, 60)
+})
+
+test('unknown figures sort last under both resource orderings', () => {
+  const processes = [
+    { pid: 1, name: 'unknown', cpuPercent: null, rssBytes: null, memPercent: null },
+    { pid: 2, name: 'measured', cpuPercent: 0.4, rssBytes: 0, memPercent: 0 },
+  ]
+  assert.deepEqual(sortProcesses(processes, 'cpu', 2).map((row) => row.pid), [2, 1])
+  assert.deepEqual(sortProcesses(processes, 'mem', 2).map((row) => row.pid), [2, 1])
+})
+
+test('a platform without a load average is reported as unavailable, not as zero', () => {
+  // `os.loadavg()` returns zeroes on Windows; the host facts must withhold it.
+  const facts = hostFacts()
+  if (process.platform === 'win32') {
+    assert.equal(facts.loadAverage, null)
+  } else {
+    assert.ok(Array.isArray(facts.loadAverage) || facts.loadAverage === null)
+  }
+  assert.equal(typeof facts.platformLabel, 'string')
+  assert.ok(facts.platformLabel.length > 0)
+})
+
+test('a reader that cannot read memory yields no memory, not zeroed memory', () => {
+  const before = { ...sampleFixture({ at: 0, total: 1000, idle: 800, processes: [] }), memory: undefined }
+  const after = { ...sampleFixture({ at: 2000, total: 2000, idle: 1200, processes: [] }), memory: undefined }
+  const reading = derive(before, after)
+  assert.equal(reading.memory, null, 'the panel must show dashes, not "0 B / 0 B"')
+  assert.equal(reading.cpu.percent, 60, 'the CPU reading is independent of the missing memory')
+})
+
+test('the live Linux reader reports per-process CPU in the same unit as its total', { skip: process.platform !== 'linux' }, async () => {
+  // This is the unit-consistency contract, exercised end to end: if a reader
+  // published its process counters in a unit the aggregate does not share, every
+  // percentage would come out as unavailable or absurd, and only a live
+  // difference of two real samples catches it.
+  const sampler = createSampler({ sampleMillis: 100, reader: linuxReader })
+  await sampler.snapshot({ sort: 'cpu', limit: 5 })
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  const reading = await sampler.snapshot({ sort: 'cpu', limit: 10 })
+  const measured = reading.processes.filter((row) => typeof row.cpuPercent === 'number')
+  assert.ok(measured.length > 0, 'a busy machine must produce at least one measured process')
+  for (const row of measured) {
+    assert.ok(row.cpuPercent >= 0, `${row.name} reported a negative share`)
+    // Per-core scale: even a machine-wide busy process cannot exceed every core.
+    assert.ok(
+      row.cpuPercent <= reading.cpu.coreCount * 100 + 1,
+      `${row.name} reported ${String(row.cpuPercent)}% on ${String(reading.cpu.coreCount)} cores`,
+    )
+  }
+  assert.ok(
+    measured.some((row) => row.cpuPercent > 0),
+    'at least one process should have done work in a 1.2s window',
+  )
 })

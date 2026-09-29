@@ -83,6 +83,8 @@ export function GaugePanel({ reading, t }) {
   const memory = reading?.memory
   const facts = reading?.facts
 
+  // A platform without a load average (Windows) reports null, and the line simply
+  // loses that half rather than showing a zero that would read as an idle machine.
   const load = Array.isArray(cpu?.loadAverage) && cpu.loadAverage.length > 0 ? cpu.loadAverage[0] : undefined
   const coreDetail = [
     facts?.coreCount === undefined ? undefined : t('cores', { count: facts.coreCount }),
@@ -92,22 +94,31 @@ export function GaugePanel({ reading, t }) {
     .join(' · ')
 
   const memoryDetail =
-    memory === undefined
+    memory == null
       ? EMPTY
       : t('usedOfTotal', { used: formatBytes(memory.used), total: formatBytes(memory.total) })
+  // `cached` is absent on Windows and on macOS it means file-backed pages; when a
+  // platform has no such figure the tooltip leaves it out instead of printing a dash.
   const memoryTitle =
-    memory === undefined
+    memory == null
       ? undefined
       : [
           t('usedOfTotal', { used: formatBytes(memory.used), total: formatBytes(memory.total) }),
-          t('cached', { value: formatBytes(memory.cached) }),
+          typeof memory.cached === 'number' ? t('cached', { value: formatBytes(memory.cached) }) : undefined,
           t('uptime', { value: formatDuration(facts?.uptimeSeconds) }),
-        ].join(' · ')
+        ]
+          .filter((part) => part !== undefined)
+          .join(' · ')
 
-  const swapEnabled = memory !== undefined && memory.swapTotal > 0
-  const swapDetail = swapEnabled
-    ? t('usedOfTotal', { used: formatBytes(memory.swapUsed), total: formatBytes(memory.swapTotal) })
-    : t('swapDisabled')
+  // Three distinct states, and they must not be conflated: a host with swap, a
+  // host that genuinely has none, and a host whose swap could not be read.
+  const swapEnabled = memory != null && memory.swapTotal > 0
+  const swapDetail =
+    memory == null
+      ? EMPTY
+      : swapEnabled
+        ? t('usedOfTotal', { used: formatBytes(memory.swapUsed), total: formatBytes(memory.swapTotal) })
+        : t('swapDisabled')
 
   return h(
     'section',
@@ -118,8 +129,16 @@ export function GaugePanel({ reading, t }) {
       h('span', { className: 'dsh-perfmon-cardTitle' }, t('resources')),
       h(
         'span',
-        { className: 'dsh-perfmon-cardMeta' },
-        [facts?.hostname, facts?.arch, t('uptime', { value: formatDuration(facts?.uptimeSeconds) })]
+        {
+          className: 'dsh-perfmon-cardMeta',
+          title: [facts?.model, facts?.release].filter((part) => typeof part === 'string' && part !== '').join(' · '),
+        },
+        [
+          facts?.hostname,
+          facts?.platformLabel,
+          facts?.arch,
+          t('uptime', { value: formatDuration(facts?.uptimeSeconds) }),
+        ]
           .filter((part) => typeof part === 'string' && part !== '')
           .join(' · '),
       ),

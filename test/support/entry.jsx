@@ -13,7 +13,7 @@ export { ProcessPanel, SORT_TAGS } from '../../src/client/ProcessPanel.jsx'
 export { GaugePanel, GAUGE_RING } from '../../src/client/GaugePanel.jsx'
 export { HeaderButton } from '../../src/client/HeaderButton.jsx'
 export { PerfmonIcon } from '../../src/client/Icon.jsx'
-export { createTranslator, describeState, resolveLanguage } from '../../src/client/copy.js'
+export { createTranslator, describeState, describeWarning, resolveLanguage } from '../../src/client/copy.js'
 export {
   formatBytes,
   formatPercent,

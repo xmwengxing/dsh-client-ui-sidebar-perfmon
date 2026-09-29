@@ -80,6 +80,23 @@ var ZH = {
     t: "\u8DDF\u8E2A",
     I: "\u7A7A\u95F2",
     X: "\u5DF2\u6B7B"
+  },
+  // 平台侧无法提供的字段一律显示这个，而不是 0。
+  unavailable: "\u2014",
+  warnings: "\u90E8\u5206\u6307\u6807\u4E0D\u53EF\u7528",
+  reader: {
+    linux: "\u8BFB\u53D6 /proc",
+    darwin: "\u8BFB\u53D6 ps / vm_stat",
+    win32: "\u8BFB\u53D6 PowerShell",
+    generic: "\u4EC5\u6807\u51C6\u5E93"
+  },
+  warning: {
+    "swap-unavailable": "\u672C\u673A\u672A\u63D0\u4F9B\u4EA4\u6362/\u9875\u9762\u6587\u4EF6\u7528\u91CF",
+    "memory-unavailable": "\u5185\u5B58\u4FE1\u606F\u4E0D\u53EF\u7528",
+    "processes-unavailable": "\u8FDB\u7A0B\u5217\u8868\u4E0D\u53EF\u7528",
+    "powershell-missing": "\u672A\u627E\u5230 PowerShell\uFF0C\u65E0\u6CD5\u8BFB\u53D6\u8FDB\u7A0B\u4E0E\u5185\u5B58",
+    "windows-json-unreadable": "PowerShell \u8F93\u51FA\u65E0\u6CD5\u89E3\u6790",
+    "generic-platform": "\u5F53\u524D\u5E73\u53F0\u6CA1\u6709\u4E13\u7528\u8BFB\u53D6\u5668\uFF0C\u4EC5\u663E\u793A\u6807\u51C6\u5E93\u80FD\u63D0\u4F9B\u7684\u6570\u636E"
   }
 };
 var EN = {
@@ -128,6 +145,23 @@ var EN = {
     t: "tracing",
     I: "idle",
     X: "dead"
+  },
+  // Anything a platform cannot answer renders as this, never as a zero.
+  unavailable: "\u2014",
+  warnings: "Some metrics are unavailable",
+  reader: {
+    linux: "reading /proc",
+    darwin: "reading ps / vm_stat",
+    win32: "reading PowerShell",
+    generic: "standard library only"
+  },
+  warning: {
+    "swap-unavailable": "This host reports no swap / page-file usage",
+    "memory-unavailable": "Memory information is unavailable",
+    "processes-unavailable": "The process list is unavailable",
+    "powershell-missing": "PowerShell was not found, so processes and memory cannot be read",
+    "windows-json-unreadable": "The PowerShell output could not be parsed",
+    "generic-platform": "No dedicated reader for this platform; only standard-library figures are shown"
   }
 };
 function resolveLanguage() {
@@ -146,6 +180,14 @@ function createTranslator() {
       return value === void 0 ? match : String(value);
     });
   };
+}
+function describeWarning(t, code) {
+  const prefix = code.split(":")[0].trim();
+  const dictionary = resolveLanguage() === "zh" ? ZH.warning : EN.warning;
+  const known = dictionary[prefix];
+  if (known === void 0) return code;
+  const detail = code.slice(prefix.length + 1).trim();
+  return detail === "" ? known : `${known} (${detail})`;
 }
 function describeState(t, code) {
   const table = resolveLanguage() === "zh" ? ZH.state : EN.state;
@@ -501,6 +543,14 @@ var STYLES = `
   color: var(--dsw-alias-label-secondary, currentColor);
 }
 
+.dsh-perfmon-warningList {
+  margin: 4px 0 0;
+  padding-inline-start: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .dsh-perfmon-empty {
   padding: 18px 10px;
   text-align: center;
@@ -675,14 +725,14 @@ function GaugePanel({ reading, t }) {
     facts?.coreCount === void 0 ? void 0 : t("cores", { count: facts.coreCount }),
     load === void 0 ? void 0 : `${t("load")} ${load.toFixed(2)}`
   ].filter((part) => part !== void 0).join(" \xB7 ");
-  const memoryDetail = memory === void 0 ? EMPTY : t("usedOfTotal", { used: formatBytes(memory.used), total: formatBytes(memory.total) });
-  const memoryTitle = memory === void 0 ? void 0 : [
+  const memoryDetail = memory == null ? EMPTY : t("usedOfTotal", { used: formatBytes(memory.used), total: formatBytes(memory.total) });
+  const memoryTitle = memory == null ? void 0 : [
     t("usedOfTotal", { used: formatBytes(memory.used), total: formatBytes(memory.total) }),
-    t("cached", { value: formatBytes(memory.cached) }),
+    typeof memory.cached === "number" ? t("cached", { value: formatBytes(memory.cached) }) : void 0,
     t("uptime", { value: formatDuration(facts?.uptimeSeconds) })
-  ].join(" \xB7 ");
-  const swapEnabled = memory !== void 0 && memory.swapTotal > 0;
-  const swapDetail = swapEnabled ? t("usedOfTotal", { used: formatBytes(memory.swapUsed), total: formatBytes(memory.swapTotal) }) : t("swapDisabled");
+  ].filter((part) => part !== void 0).join(" \xB7 ");
+  const swapEnabled = memory != null && memory.swapTotal > 0;
+  const swapDetail = memory == null ? EMPTY : swapEnabled ? t("usedOfTotal", { used: formatBytes(memory.swapUsed), total: formatBytes(memory.swapTotal) }) : t("swapDisabled");
   return (0, import_react.createElement)(
     "section",
     { className: "dsh-perfmon-card", "aria-label": t("resources") },
@@ -692,8 +742,16 @@ function GaugePanel({ reading, t }) {
       (0, import_react.createElement)("span", { className: "dsh-perfmon-cardTitle" }, t("resources")),
       (0, import_react.createElement)(
         "span",
-        { className: "dsh-perfmon-cardMeta" },
-        [facts?.hostname, facts?.arch, t("uptime", { value: formatDuration(facts?.uptimeSeconds) })].filter((part) => typeof part === "string" && part !== "").join(" \xB7 ")
+        {
+          className: "dsh-perfmon-cardMeta",
+          title: [facts?.model, facts?.release].filter((part) => typeof part === "string" && part !== "").join(" \xB7 ")
+        },
+        [
+          facts?.hostname,
+          facts?.platformLabel,
+          facts?.arch,
+          t("uptime", { value: formatDuration(facts?.uptimeSeconds) })
+        ].filter((part) => typeof part === "string" && part !== "").join(" \xB7 ")
       )
     ),
     (0, import_react.createElement)(
@@ -865,7 +923,13 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
             (0, import_react2.createElement)(
               "div",
               { className: "dsh-perfmon-nameMeta" },
-              `PID ${String(process.pid)} \xB7 ${t("threads", { count: process.threads })} \xB7 ${describeState(t, process.state)}`
+              // Windows reports neither a thread count nor a state; the line
+              // keeps only what the platform actually answered.
+              [
+                `PID ${String(process.pid)}`,
+                typeof process.threads === "number" ? t("threads", { count: process.threads }) : void 0,
+                process.state === null || process.state === void 0 ? void 0 : describeState(t, process.state)
+              ].filter((part) => part !== void 0).join(" \xB7 ")
             )
           )
         )
@@ -974,6 +1038,20 @@ function PerfmonBody({ t, load = fetchSnapshot }) {
     ) : null,
     status === "loading" && reading === void 0 ? (0, import_react3.createElement)("div", { className: "dsh-perfmon-empty" }, t("loading")) : null,
     reading === void 0 ? null : (0, import_react3.createElement)(GaugePanel, { reading, t }),
+    // A platform that cannot answer a field says so here rather than leaving the
+    // panel silently short of a number.
+    Array.isArray(reading?.warnings) && reading.warnings.length > 0 ? (0, import_react3.createElement)(
+      "div",
+      { className: "dsh-perfmon-notice dsh-perfmon-notice--muted" },
+      (0, import_react3.createElement)("div", null, t("warnings")),
+      (0, import_react3.createElement)(
+        "ul",
+        { className: "dsh-perfmon-warningList" },
+        reading.warnings.map(
+          (code) => (0, import_react3.createElement)("li", { key: code }, describeWarning(t, String(code)))
+        )
+      )
+    ) : null,
     reading === void 0 ? null : (0, import_react3.createElement)(ProcessPanel, { reading, sort, onSortChange: setSort, t }),
     (0, import_react3.createElement)(
       "div",

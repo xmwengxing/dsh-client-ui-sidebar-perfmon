@@ -187,7 +187,17 @@ export function ProcessPanel({ reading, sort, onSortChange, t }) {
                 h(
                   'div',
                   { className: 'dsh-perfmon-nameMeta' },
-                  `PID ${String(process.pid)} · ${t('threads', { count: process.threads })} · ${describeState(t, process.state)}`,
+                  // Windows reports neither a thread count nor a state; the line
+                  // keeps only what the platform actually answered.
+                  [
+                    `PID ${String(process.pid)}`,
+                    typeof process.threads === 'number' ? t('threads', { count: process.threads }) : undefined,
+                    process.state === null || process.state === undefined
+                      ? undefined
+                      : describeState(t, process.state),
+                  ]
+                    .filter((part) => part !== undefined)
+                    .join(' · '),
                 ),
               ),
             ),
