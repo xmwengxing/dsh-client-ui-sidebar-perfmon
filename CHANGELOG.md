@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.3.1
+
+- **Fixed: the measure button did nothing in the GUI.** The scan derived its
+  folders from the live session store (`ctx.sessions.list()`), which only holds
+  sessions created *in this process* — but the sidebar's session list comes from
+  the session-query corpus (live **and** persisted), and merely viewing a session
+  never enters it into the live store. Every click therefore started a scan over
+  an empty folder set, which answered `idle` and left the row unchanged. Worse,
+  the service read itself was silently swallowed: Cordis refuses a bare
+  `ctx.sessions` without an inject declaration, and the defensive `try/catch`
+  turned that refusal into an empty list.
+- **The button now measures the session you are viewing.** The start request
+  carries the session id (session-scoped slots inject `sessionId`; the header
+  button forwards it, and an opening without one falls back to the right
+  Sidebar's mounted-seat binding). The host resolves it through the live store
+  first, then through `sessionQuery.observeSession()` for cold sessions, and
+  walks the resolved `header.cwd`. An id that resolves to nothing says so
+  (`project-dir-session-unresolved`) instead of scanning nothing quietly.
+- **Fixed: a scan was aborted and restarted every two seconds.** The measure
+  control was held in a ref *and* a state copy, and the render body kept
+  rewriting the ref, so every poll re-sent `measure: true` — each one aborting
+  the running scan and restarting it. The control now lives in a ref alone and
+  is consumed by exactly one request.
+- The optional session services are captured through `ctx.inject(...)`
+  contributions, so a deployment without the session store or the query engine
+  degrades to the empty answer instead of hanging the boot on an unmet inject.
+- A string `projectDir` config now actually pins the scan (it was resolved but
+  never consulted); `''`/`false` still hides the line.
+- Tests: 88 specs, adding the named-folder scan paths (override order,
+  persistence across folder-set changes, mid-walk stop), the session-cwd
+  resolution chain (live-first, cold fallback, disposal, absent services), the
+  session-carrying request shape, and the mounted-seat fallback.
+
+## 0.3.0
+
+- **The resource window shows the project directory's size — on demand.** A
+  measuring a folder is CPU- and IO-heavy work (a session sitting in a home
+  directory can hold hundreds of thousands of entries), so the panel never
+  starts one implicitly. The project-directory line carries a button that
+  scans only the folders of the sessions open at that moment; while it runs
+  the button is a stop control, and a stop lands within one filesystem round
+  trip, publishing the partial figures with an explicit "stopped" note. The
+  finished reading stays until the next scan replaces it.
+- **The poll never touches the filesystem.** The panel's two-second cadence
+  reads only the scan's stored state, so an open panel costs nothing whether a
+  scan is running, finished, or was never started.
+- **The walk is bounded and safe.** `projectDirEntryBudget` (default 50,000
+  entries per folder) stops a runaway tree and says so beside the figure;
+  `projectDirMaxDirs` (default 12) caps how many distinct folders one scan
+  covers, and the rest are counted and named rather than silently dropped.
+  Symlinks are neither followed nor counted, so `node_modules` cycles are
+  harmless. Unreadable subfolders are skipped and named; an unreadable root is
+  `—` with its reason, never a fabricated zero.
+- `projectDir` config: a string pins one folder for the manual scan; `''` or
+  `false` hides the line entirely; unset (the default) follows the open
+  sessions.
+- New host fields in the snapshot: `disk` (`projectDir`, `projectDirs[]`,
+  `projectBytes`, `projectEntries`, `projectTruncated`, `droppedDirCount`,
+  `status` (`idle` | `scanning` | `done` | `hidden`), `warnings`), merged into
+  the response's top-level `warnings`; the scan is driven with `measure: true`
+  (start) / `measure: false` (stop) on the same route.
+- Tests: 78 specs, adding the scan controller's rules (manual start, mid-walk
+  stop, stored reading served without filesystem work, budget, symlink,
+  deduplication, drop accounting) and the panel's start/stop button states.
+
 ## 0.2.2
 
 - **The three process columns are separated now.** They sat 8px apart with nothing

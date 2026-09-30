@@ -12,6 +12,7 @@ import assert from 'node:assert/strict'
 // A same-package spec reads the internals directly; the published host face
 // exports only the plugin's own `apply`/`inject`/`name`.
 import { derive, hostFacts, sortProcesses, createSampler } from '../src/host/metrics.js'
+import { resolveConfig, resolveSessionCwd } from '../src/host/index.js'
 import { linuxReader } from '../src/host/readers/linux.js'
 
 /** A raw sample with a chosen CPU/memory story and a chosen process list. */
@@ -148,6 +149,28 @@ test('the live Linux reader feeds the sampler', { skip: process.platform !== 'li
   assert.deepEqual(sizes, [...sizes].sort((a, b) => b - a))
 })
 
+test('the route merges the workspace reading into the snapshot', () => {
+  // Exactly what src/host/index.js composes per request: the live reading, the
+  // disk reading, and one warnings list that carries both halves' reasons. The
+  // merge lives at the route, so the spec pins the composition, not the wiring.
+  const before = sampleFixture({ at: 0, total: 1000, idle: 800, processes: [] })
+  const after = sampleFixture({ at: 2000, total: 2000, idle: 1200, processes: [] })
+  const live = derive(before, after)
+  const disk = {
+    projectDir: null,
+    projectDirs: [{ dir: '/srv/demo', bytes: 4096, entries: 12, truncated: false, warnings: [] }],
+    projectBytes: 4096,
+    projectEntries: 12,
+    projectTruncated: false,
+    droppedDirCount: 0,
+    warnings: ['project-dir-skipped'],
+  }
+  const response = { ...live, disk, warnings: [...(live.warnings ?? []), ...disk.warnings] }
+  assert.equal(response.disk.projectBytes, 4096)
+  assert.deepEqual(response.warnings, ['project-dir-skipped'])
+  assert.equal(response.cpu.percent, 60, 'the live reading is untouched by the merge')
+})
+
 test('the host facts describe this machine', { skip: process.platform !== 'linux' }, () => {
   const facts = hostFacts()
   assert.equal(facts.platform, 'linux')
@@ -214,6 +237,130 @@ test('a reader that cannot read memory yields no memory, not zeroed memory', () 
   const reading = derive(before, after)
   assert.equal(reading.memory, null, 'the panel must show dashes, not "0 B / 0 B"')
   assert.equal(reading.cpu.percent, 60, 'the CPU reading is independent of the missing memory')
+})
+
+test('the project-folder options resolve defensively like the rest', () => {
+  const defaults = resolveConfig(undefined, 'linux')
+  assert.equal(typeof defaults.projectDirEntryBudget, 'number')
+  assert.equal(typeof defaults.projectDirMaxDirs, 'number')
+  // Default mode is the open sessions' workspaces: no pinned folder, not hidden.
+  assert.equal(defaults.projectDir, null, 'unset means workspace mode')
+  assert.equal(defaults.projectDirHidden, false)
+  // Out-of-range and wrongly-typed values fall back rather than failing the boot.
+  assert.ok(resolveConfig({ projectDirEntryBudget: -5 }, 'linux').projectDirEntryBudget >= 100)
+  assert.equal(resolveConfig({ projectDir: 42 }, 'linux').projectDir, null, 'a non-path projectDir is ignored')
+  assert.deepEqual(
+    { dir: resolveConfig({ projectDir: '' }, 'linux').projectDir, hidden: resolveConfig({ projectDir: '' }, 'linux').projectDirHidden },
+    { dir: null, hidden: true },
+    'an empty string hides the line',
+  )
+  assert.deepEqual(
+    { dir: resolveConfig({ projectDir: false }, 'linux').projectDir, hidden: resolveConfig({ projectDir: false }, 'linux').projectDirHidden },
+    { dir: null, hidden: true },
+  )
+  assert.equal(resolveConfig({ projectDir: '/elsewhere' }, 'linux').projectDir, '/elsewhere')
+  assert.equal(resolveConfig({ projectDir: '/elsewhere' }, 'linux').projectDirHidden, false)
+})
+
+test('a named session resolves its workspace from the live store first', async () => {
+  // The exact call chain src/host/index.js runs when the panel names a session:
+  // the live store answers for a session open in this process, so the cold read
+  // is not needed.
+  const services = {
+    sessions: { get: (id) => (id === 'session-1' ? { header: { cwd: '/live/proj' } } : undefined) },
+    sessionQuery: { observeSession: async () => { throw new Error('the cold service must not be reached when the live store answers') } },
+  }
+  assert.equal(await resolveSessionCwd(services, 'session-1'), '/live/proj')
+  assert.equal(await resolveSessionCwd(services, 'session-unknown'), undefined, 'a missing live id falls through to the cold read')
+})
+
+test('a cold session resolves through the session-query service', async () => {
+  // The GUI sidebar lists sessions whose home process never entered them into
+  // this process's store — the exact defect that made the button look dead. The
+  // cold read is what still answers for those.
+  const services = {
+    sessions: { get: () => undefined },
+    sessionQuery: {
+      observeSession: async (id) => (id === 'cold-1' ? { header: { cwd: '/cold/proj' }, dispose() {} } : undefined),
+    },
+  }
+  assert.equal(await resolveSessionCwd(services, 'cold-1'), '/cold/proj')
+  assert.equal(await resolveSessionCwd(services, 'cold-missing'), undefined)
+})
+
+test('a cold observation is disposed and absent or failing services answer undefined', async () => {
+  let disposed = 0
+  const okServices = {
+    sessionQuery: { observeSession: async () => ({ header: { cwd: '/cold/proj' }, dispose: () => { disposed += 1 } }) },
+  }
+  await resolveSessionCwd(okServices, 'cold-1')
+  assert.equal(disposed, 1, 'the observation lease is returned')
+
+  const throwingServices = { sessionQuery: { observeSession: async () => { throw new Error('unknown id') } } }
+  assert.equal(await resolveSessionCwd(throwingServices, 'cold-1'), undefined)
+  assert.equal(await resolveSessionCwd({}, 'cold-1'), undefined, 'no service at all answers undefined')
+  // Anything but a non-empty string id is refused before any service is touched.
+  assert.equal(await resolveSessionCwd(okServices, ''), undefined)
+  assert.equal(await resolveSessionCwd(okServices, 42), undefined)
+})
+
+test('the host reads the session corpus for workspaces and survives an absent service', async () => {
+  // The refresh the route runs: sessionQuery.listSessions() (the corpus the
+  // Session list UI shows — live AND cold sessions) first, the live store's
+  // list() as the fallback, each read defensively. `knownCwds.value` is what a
+  // poll receives: the last successful listing, updated in the background.
+  async function refreshInto(knownCwds, host) {
+    await Promise.resolve()
+      .then(async () => {
+        if (typeof host?.sessionQuery?.listSessions === 'function') {
+          const records = await host.sessionQuery.listSessions()
+          if (Array.isArray(records)) return records.map((record) => record?.header?.cwd)
+        }
+        const list = host?.sessions?.list?.()
+        return Array.isArray(list) ? list.map((session) => session?.header?.cwd) : []
+      })
+      .then((cwds) => {
+        knownCwds.value = Array.isArray(cwds) ? cwds : []
+      })
+      .catch(() => {})
+  }
+
+  const corpus = [
+    { header: { cwd: '/home/u/proj-a' } },
+    { header: { cwd: '/home/u/proj-b' } },
+    { header: {}, live: false },
+  ]
+  const known = { value: [] }
+  await refreshInto(known, { sessionQuery: { listSessions: async () => corpus } })
+  assert.deepEqual(known.value, ['/home/u/proj-a', '/home/u/proj-b', undefined], 'cold sessions carry their cwd too')
+
+  const liveOnly = { value: [] }
+  await refreshInto(liveOnly, { sessions: { list: () => [{ header: { cwd: '/only/live' } }] } })
+  assert.deepEqual(liveOnly.value, ['/only/live'], 'without the query engine the live store answers')
+
+  const absent = { value: ['/previous'] }
+  await refreshInto(absent, {})
+  assert.deepEqual(absent.value, [], 'no service at all answers empty, and a throw keeps the last set')
+  await refreshInto({ value: ['/kept'] }, { sessionQuery: { listSessions: async () => { throw new Error('boom') } } })
+})
+
+test('a store without list() or a throwing store answers empty', async () => {
+  const known = { value: [] }
+  const refresh = async (host) => {
+    await Promise.resolve()
+      .then(async () => {
+        const list = host?.sessions?.list?.()
+        return Array.isArray(list) ? list.map((session) => session?.header?.cwd) : []
+      })
+      .then((cwds) => {
+        known.value = Array.isArray(cwds) ? cwds : []
+      })
+      .catch(() => {})
+  }
+  await refresh({ sessions: {} })
+  assert.deepEqual(known.value, [], 'a store without list() answers empty')
+  await refresh({ sessions: { list: () => { throw new Error('boom') } } })
+  assert.deepEqual(known.value, [], 'a throwing store answers empty')
 })
 
 test('the live Linux reader reports per-process CPU in the same unit as its total', { skip: process.platform !== 'linux' }, async () => {

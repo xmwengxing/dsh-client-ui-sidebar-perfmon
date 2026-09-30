@@ -66,9 +66,12 @@ export function apply(ctx) {
           order: HEADER_ORDER,
           inject: () => ({
             t,
-            open: () => {
+            // The seat is session-scoped, so `sessionId` is the session whose
+            // header row the button sits in — the folder meter measures that
+            // session's workspace, not whichever session the live store holds.
+            open: (sessionId) => {
               try {
-                ctx.get('sidebarRight')?.openTab(PERFMON_KIND)
+                ctx.get('sidebarRight')?.openTab(PERFMON_KIND, { params: { sessionId } })
               } catch (error) {
                 ctx.logger?.warn?.('perfmon: could not open the monitor page: %s', error?.message ?? String(error))
               }

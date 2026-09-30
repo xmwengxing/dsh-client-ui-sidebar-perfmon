@@ -18,12 +18,16 @@ import { PerfmonIcon } from './Icon.jsx'
 /**
  * Render the header button.
  *
+ * The session-scoped seat injects `sessionId` — the session whose header row
+ * the button sits in — and it is carried to the perfmon page so its folder
+ * meter knows which workspace the user is looking at.
  * @param {object} props - the injected face.
+ * @param {string} [props.sessionId] - the session this header row belongs to.
  * @param {() => void} props.open - open (or focus) the perfmon page.
  * @param {(key: string, values?: object) => string} props.t - translator.
  * @returns {import('react').ReactNode} the button.
  */
-export function HeaderButton({ open, t }) {
+export function HeaderButton({ sessionId, open, t }) {
   const label = t('headerButton')
   return h(
     'button',
@@ -33,7 +37,7 @@ export function HeaderButton({ open, t }) {
       title: t('headerButtonOpen'),
       'aria-label': t('headerButtonOpen'),
       onClick: () => {
-        open()
+        open(sessionId)
       },
     },
     h(PerfmonIcon, { size: 15 }),

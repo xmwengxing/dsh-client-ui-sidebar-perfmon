@@ -11,7 +11,7 @@
  * @module dsh-client-ui-sidebar-perfmon/PerfmonBody
  */
 
-import { createElement as h, useCallback, useEffect, useRef, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { fetchSnapshot } from './api.js'
 import { GaugePanel } from './GaugePanel.jsx'
 import { ProcessPanel } from './ProcessPanel.jsx'
@@ -39,12 +39,17 @@ function isHidden() {
 /**
  * Render the panel.
  *
+ * `sessionId` is injected by the session-scoped tab seat: the folder meter
+ * measures that session's workspace when the user asks. The mounted-seat
+ * subscription is only the fallback for an opening without one.
  * @param {object} props - the injected face.
  * @param {(key: string, values?: object) => string} props.t - translator.
  * @param {(request: object) => Promise<object>} [props.load] - snapshot loader, injectable for tests.
+ * @param {string} [props.sessionId] - the session whose workspace the meter measures.
+ * @param {object} [props.ctx] - the client context, for the mounted-seat fallback.
  * @returns {import('react').ReactNode} the panel.
  */
-export function PerfmonBody({ t, load = fetchSnapshot }) {
+export function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
   const [sort, setSort] = useState('cpu')
   const [nonce, setNonce] = useState(0)
   const [state, setState] = useState({ status: 'loading', reading: undefined, error: undefined, intervalMs: DEFAULT_INTERVAL_MS })
@@ -52,6 +57,34 @@ export function PerfmonBody({ t, load = fetchSnapshot }) {
 
   const sortRef = useRef(sort)
   sortRef.current = sort
+  // The directory scan's control, held outside React state on purpose: exactly
+  // one request may carry it. A state mirror would be rewritten on every render
+  // and re-send `measure: true` on every poll, each one aborting the scan the
+  // previous request started — the scan would never finish.
+  const measureRef = useRef(null)
+
+  // The folder meter measures the viewed session's workspace. The seat injects
+  // it; when an opening carries none, the right Sidebar's mounted-seat binding
+  // says which session is on screen. Subscribing with `useSyncExternalStore`
+  // keeps the read React-safe and re-renders the panel when it moves.
+  const fallbackSessionId = useSyncExternalStore(
+    useCallback(
+      (onStoreChange) => {
+        const mounted = ctx?.get?.('sidebarRight')?.mounted
+        if (mounted === undefined || mounted === null) return () => {}
+        return mounted.subscribe(onStoreChange)
+      },
+      [ctx],
+    ),
+    () => {
+      const mounted = ctx?.get?.('sidebarRight')?.mounted?.getSnapshot?.()
+      return typeof mounted === 'string' ? mounted : undefined
+    },
+    () => undefined,
+  )
+  const activeSessionId = typeof sessionId === 'string' && sessionId !== '' ? sessionId : fallbackSessionId
+  const sessionRef = useRef(activeSessionId)
+  sessionRef.current = activeSessionId
 
   useEffect(() => {
     aliveRef.current = true
@@ -77,10 +110,15 @@ export function PerfmonBody({ t, load = fetchSnapshot }) {
       }
       controller = new AbortController()
       const requestedSort = sortRef.current
+      // The scan control is consumed by exactly one request: the one that acts on it.
+      const measure = measureRef.current
+      measureRef.current = null
       try {
         const reading = await load({
           sort: requestedSort,
           limit: requestedSort === 'name' ? NAME_SORT_LIMIT : DEFAULT_LIMIT,
+          measure,
+          session: measure === true ? sessionRef.current : undefined,
           signal: controller.signal,
         })
         if (stopped || !aliveRef.current) return
@@ -130,6 +168,14 @@ export function PerfmonBody({ t, load = fetchSnapshot }) {
     setNonce((value) => value + 1)
   }, [])
 
+  // Start or stop the directory scan: the flag rides exactly the next request
+  // (an immediate re-read, not the next scheduled poll), and after it is sent
+  // the state comes back from the host in the ordinary polling responses.
+  const setMeasure = useCallback((value) => {
+    measureRef.current = value
+    setNonce((n) => n + 1)
+  }, [])
+
   const { reading, status, error, intervalMs } = state
   const failed = status === 'error'
 
@@ -151,7 +197,18 @@ export function PerfmonBody({ t, load = fetchSnapshot }) {
     status === 'loading' && reading === undefined
       ? h('div', { className: 'dsh-perfmon-empty' }, t('loading'))
       : null,
-    reading === undefined ? null : h(GaugePanel, { reading, t }),
+    reading === undefined
+      ? null
+      : h(GaugePanel, {
+          reading,
+          t,
+          sessionId: activeSessionId,
+          measure: {
+            running: reading?.disk?.status === 'scanning',
+            onStart: () => setMeasure(true),
+            onStop: () => setMeasure(false),
+          },
+        }),
     // A platform that cannot answer a field says so here rather than leaving the
     // panel silently short of a number.
     Array.isArray(reading?.warnings) && reading.warnings.length > 0

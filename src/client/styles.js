@@ -126,6 +126,77 @@ export const STYLES = `
   white-space: nowrap;
 }
 
+/* The project-directory line sits under the gauges, inside the resource card.
+   The card is a flex column that must keep its own height, so this row is fixed:
+   a shrinking child here is the same squeeze that twice bit the search field. */
+.dsh-perfmon-disk {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px 9px;
+  border-block-start: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.22));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-diskLabel {
+  color: var(--dsw-alias-label-secondary, currentColor);
+  white-space: nowrap;
+}
+
+.dsh-perfmon-diskValue {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The no-answer-yet spinner: a quarter arc that turns inside the value's box,
+   so the row's height and baseline stay exactly the same as when a size shows. */
+.dsh-perfmon-diskSpinner {
+  box-sizing: border-box;
+  inline-size: 11px;
+  block-size: 11px;
+  border: 1.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
+  border-block-start-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  border-radius: 50%;
+  animation: dsh-perfmon-spin 0.9s linear infinite;
+  align-self: center;
+}
+
+@keyframes dsh-perfmon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dsh-perfmon-diskDetail {
+  color: var(--dsw-alias-label-tertiary, currentColor);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-perfmon-diskAction {
+  flex: none;
+  margin-inline-start: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, transparent);
+  color: var(--dsw-alias-label-secondary, currentColor);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dsh-perfmon-diskAction:hover {
+  color: var(--dsw-alias-label-primary, currentColor);
+  border-color: var(--dsw-alias-border-l3, rgba(127, 127, 127, 0.34));
+}
+
 /* The tag row and the data rows share one template, so every tag is the header
    of the column it orders. The two metric columns are sized to their widest real
    content ("1024.0%" and "999.9 MB · 99%") and never shrink; the name column

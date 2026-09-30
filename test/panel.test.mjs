@@ -24,6 +24,7 @@ const {
   PerfmonBody,
   ProcessPanel,
   GaugePanel,
+  DiskPanel,
   HeaderButton,
   GAUGE_RING,
   createTranslator,
@@ -160,6 +161,174 @@ test('the resource window shows one gauge each for CPU, memory and swap', async 
   assert.match(details[2], /1\.0 GB \/ 4\.0 GB/)
 })
 
+test('the resource window carries the project-folder line', async (context) => {
+  const disk = {
+    projectDir: '/srv/demo',
+    projectDirs: [{ dir: '/srv/demo', bytes: 3 * 1024 ** 3, entries: 4321, truncated: false, warnings: [] }],
+    projectBytes: 3 * 1024 ** 3,
+    projectEntries: 4321,
+    projectTruncated: false,
+    droppedDirCount: 0,
+    warnings: [],
+  }
+  const renderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk, warnings: [] }), t }),
+  )
+  const row = renderer.root.findByProps({ className: 'dsh-perfmon-disk' })
+  assert.equal(row.props.title.includes('/srv/demo'), true, 'the tooltip names the folder')
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-diskLabel'), ['项目目录'])
+  assert.equal(textsOf(renderer, 'dsh-perfmon-diskValue')[0], '3.0 GB')
+  assert.match(textsOf(renderer, 'dsh-perfmon-diskDetail')[0], /4321 项/)
+  // Without a disk reading the row disappears rather than showing a zero.
+  const bare = await mount(context, React.createElement(GaugePanel, { reading: readingFixture(), t }))
+  assert.equal(bare.root.findAllByProps({ className: 'dsh-perfmon-disk' }).length, 0)
+})
+
+test('a multi-workspace reading says how many folders the total covers', async (context) => {
+  const disk = {
+    projectDir: null,
+    projectDirs: [
+      { dir: '/srv/alpha', bytes: 1024 ** 3, entries: 100, truncated: false, warnings: [] },
+      { dir: '/srv/beta', bytes: 2 * 1024 ** 3, entries: 200, truncated: false, warnings: [] },
+    ],
+    projectBytes: 3 * 1024 ** 3,
+    projectEntries: 300,
+    projectTruncated: false,
+    droppedDirCount: 0,
+    warnings: [],
+  }
+  const renderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk, warnings: [] }), t }),
+  )
+  assert.equal(textsOf(renderer, 'dsh-perfmon-diskValue')[0], '3.0 GB')
+  assert.match(textsOf(renderer, 'dsh-perfmon-diskDetail')[0], /2 个目录/)
+  const row = renderer.root.findByProps({ className: 'dsh-perfmon-disk' })
+  assert.equal(row.props.title.includes('/srv/alpha'), true, 'the tooltip names every folder')
+  assert.equal(row.props.title.includes('/srv/beta'), true)
+})
+
+test('the scan is manual: a button starts it, a running scan shows a stop control', async (context) => {
+  // Nothing measured yet: the row invites the click instead of pretending.
+  const idle = {
+    projectDir: null,
+    projectDirs: [],
+    projectBytes: null,
+    projectEntries: 0,
+    projectTruncated: false,
+    droppedDirCount: 0,
+    warnings: ['project-dir-no-cwd'],
+    status: 'idle',
+  }
+  const starts = []
+  const stops = []
+  const measure = { running: false, onStart: () => starts.push(1), onStop: () => stops.push(1) }
+  const idleRenderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk: idle, warnings: ['project-dir-no-cwd'] }), measure, t }),
+  )
+  assert.equal(textsOf(idleRenderer, 'dsh-perfmon-diskValue')[0], '—')
+  assert.match(textsOf(idleRenderer, 'dsh-perfmon-diskDetail')[0], /尚未统计/)
+  const startButton = idleRenderer.root.findByProps({ className: 'dsh-perfmon-diskAction' })
+  assert.match(startButton.props.title, /统计当前会话目录/)
+  await TestRenderer.act(async () => {
+    startButton.props.onClick()
+  })
+  assert.deepEqual(starts, [1], 'clicking the button starts a scan')
+  assert.deepEqual(stops, [])
+
+  // While scanning: a spinner stands where the size would sit, and the same
+  // seat turns into the stop control.
+  const scanning = { ...idle, warnings: [], status: 'scanning' }
+  const running = { running: true, onStart: () => starts.push(1), onStop: () => stops.push(1) }
+  const scanningRenderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk: scanning, warnings: [] }), measure: running, t }),
+  )
+  assert.ok(scanningRenderer.root.findByProps({ className: 'dsh-perfmon-diskSpinner' }), 'a running scan spins')
+  assert.match(textsOf(scanningRenderer, 'dsh-perfmon-diskDetail')[0], /正在统计/)
+  const stopButton = scanningRenderer.root.findByProps({ className: 'dsh-perfmon-diskAction' })
+  assert.match(stopButton.props.title, /停止统计/)
+  await TestRenderer.act(async () => {
+    stopButton.props.onClick()
+  })
+  assert.deepEqual(stops, [1], 'clicking again stops the scan')
+
+  // A hidden-by-config reading renders no row at all.
+  const hidden = { ...idle, warnings: ['project-dir-hidden'], status: 'hidden' }
+  const hiddenRenderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk: hidden, warnings: ['project-dir-hidden'] }), measure, t }),
+  )
+  assert.equal(hiddenRenderer.root.findAllByProps({ className: 'dsh-perfmon-disk' }).length, 0)
+})
+
+test('an unreadable project folder explains itself instead of reading as zero', async (context) => {
+  const disk = {
+    projectDir: null,
+    projectDirs: [{ dir: '/srv/demo', bytes: null, entries: 0, truncated: false, warnings: ['project-dir-unavailable'] }],
+    projectBytes: null,
+    projectEntries: 0,
+    projectTruncated: false,
+    droppedDirCount: 0,
+    warnings: ['project-dir-unavailable'],
+  }
+  const renderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk, warnings: ['project-dir-unavailable'] }), t }),
+  )
+  assert.equal(textsOf(renderer, 'dsh-perfmon-diskValue')[0], '—')
+  assert.match(textsOf(renderer, 'dsh-perfmon-diskDetail')[0], /不可读/)
+})
+
+// A very large tree with an unreachable corner is still a usable number, but it
+// must say so beside the figure rather than quietly overstate its own accuracy.
+test('a truncated project-folder walk says so next to the size', async (context) => {
+  const disk = {
+    projectDir: '/srv/big',
+    projectDirs: [{ dir: '/srv/big', bytes: 100 * 1024 ** 3, entries: 50000, truncated: true, warnings: ['project-dir-partial'] }],
+    projectBytes: 100 * 1024 ** 3,
+    projectEntries: 50000,
+    projectTruncated: true,
+    droppedDirCount: 0,
+    warnings: ['project-dir-partial'],
+  }
+  const renderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk, warnings: ['project-dir-partial'] }), t }),
+  )
+  const detail = textsOf(renderer, 'dsh-perfmon-diskDetail')[0]
+  assert.match(detail, /已截断/)
+  assert.equal(textsOf(renderer, 'dsh-perfmon-diskValue')[0], '100 GB')
+})
+
+test('folders the reading had to drop are named beside the total', async (context) => {
+  const disk = {
+    projectDir: null,
+    projectDirs: [
+      { dir: '/srv/a', bytes: 10, entries: 1, truncated: false, warnings: [] },
+      { dir: '/srv/b', bytes: 20, entries: 2, truncated: false, warnings: [] },
+    ],
+    projectBytes: 30,
+    projectEntries: 3,
+    projectTruncated: false,
+    droppedDirCount: 3,
+    warnings: ['project-dir-dropped'],
+  }
+  const renderer = await mount(
+    context,
+    React.createElement(GaugePanel, { reading: readingFixture({ disk, warnings: ['project-dir-dropped'] }), t }),
+  )
+  assert.match(textsOf(renderer, 'dsh-perfmon-diskDetail')[0], /另有 3 个目录未统计/)
+})
+
+test('DiskPanel renders nothing without a disk reading', (context) => {
+  return mount(context, React.createElement(DiskPanel, { disk: undefined, warnings: [], t })).then((renderer) => {
+    assert.equal(renderer.root.findAllByProps({ className: 'dsh-perfmon-disk' }).length, 0)
+  })
+})
+
 test('a host without swap says so instead of drawing a zero ring', async (context) => {
   const reading = readingFixture()
   reading.memory.swapTotal = 0
@@ -239,6 +408,106 @@ test('the list renders the order it is given, and filters by name or PID', async
     filter.props.onChange({ target: { value: '2' } })
   })
   assert.deepEqual(rowNames(renderer), ['heavy-mem'], 'a PID match must survive the filter')
+})
+
+test('the measure request names the session whose workspace is to be scanned', async (context) => {
+  const requests = []
+  let scanning = false
+  const load = async (request) => {
+    if (request.measure === true) scanning = true
+    if (request.measure === false) scanning = false
+    requests.push({ measure: request.measure, session: request.session })
+    return readingFixture({ disk: { status: scanning ? 'scanning' : 'idle', warnings: scanning ? [] : ['project-dir-no-cwd'] } })
+  }
+  const renderer = await mount(
+    context,
+    React.createElement(PerfmonBody, { t, load, sessionId: 'session-9' }),
+  )
+  await TestRenderer.act(async () => {})
+  const start = renderer.root.findByProps({ className: 'dsh-perfmon-diskAction' })
+  await TestRenderer.act(async () => {
+    start.props.onClick()
+  })
+  // The start request carries the session id; the stop request carries none.
+  // How many times a control reaches the wire is the act scheduler's business
+  // (a re-send is a no-op on the host), so the spec asserts the order of the
+  // distinct control requests rather than their positions.
+  const controlsBeforeStop = requests.filter((request) => request.measure !== undefined)
+  const startControl = controlsBeforeStop.find((request) => request.measure === true)
+  assert.notEqual(startControl, undefined, 'the start click sent a start control')
+  assert.equal(startControl.session, 'session-9', 'the start names the session')
+  // The fixture flips to `scanning`, so the button is the stop control now.
+  const stop = renderer.root.findByProps({ className: 'dsh-perfmon-diskAction' })
+  await TestRenderer.act(async () => {
+    stop.props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  const controls = requests.filter((request) => request.measure !== undefined)
+  const firstStop = controls.findIndex((request) => request.measure === false)
+  assert.ok(firstStop > controls.indexOf(startControl), 'the stop control follows the start')
+  assert.ok(
+    controls.filter((request) => request.measure === false).every((request) => request.session === undefined),
+    'stop requests carry no session',
+  )
+  assert.ok(
+    requests.filter((request) => request.measure === undefined).every((request) => request.session === undefined),
+    'ordinary polls carry neither control',
+  )
+})
+
+// The sidebar shows sessions whose home process never entered them into the
+// host's live store; when no opening carries a session id, the mounted-seat
+// binding is what the meter falls back to.
+test('without an injected session the mounted seat is the fallback', async (context) => {
+  let listeners = 0
+  const ctx = {
+    get: (name) =>
+      name === 'sidebarRight'
+        ? { mounted: { subscribe: () => { listeners += 1; return () => { listeners -= 1 } }, getSnapshot: () => 'seat-session' } }
+        : undefined,
+  }
+  const requests = []
+  const load = async (request) => {
+    requests.push(request.session)
+    return readingFixture({ disk: { status: 'idle', warnings: ['project-dir-no-cwd'] } })
+  }
+  const renderer = await mount(
+    context,
+    React.createElement(PerfmonBody, { t, load, ctx }),
+  )
+  await TestRenderer.act(async () => {})
+  const start = renderer.root.findByProps({ className: 'dsh-perfmon-diskAction' })
+  await TestRenderer.act(async () => {
+    start.props.onClick()
+  })
+  assert.deepEqual(requests[requests.length - 1], 'seat-session')
+
+  // No service at all: the meter still works, it just has no session to name.
+  const bare = await mount(
+    context,
+    React.createElement(PerfmonBody, { t, load, ctx: {} }),
+  )
+  await TestRenderer.act(async () => {})
+  const bareStart = bare.root.findByProps({ className: 'dsh-perfmon-diskAction' })
+  await TestRenderer.act(async () => {
+    bareStart.props.onClick()
+  })
+  assert.equal(requests[requests.length - 1], undefined)
+})
+
+// The seat injects the session id straight into the header button, which is what
+// hands the page its session without reaching any store.
+test('the header button receives the session id from its opening', async (context) => {
+  const opened = []
+  const renderer = await mount(
+    context,
+    React.createElement(HeaderButton, { t, sessionId: 'session-3', open: (id) => opened.push(id) }),
+  )
+  const button = renderer.root.findByType('button')
+  await TestRenderer.act(async () => {
+    button.props.onClick()
+  })
+  assert.deepEqual(opened, ['session-3'])
 })
 
 test('the panel reads once on mount, re-reads when the tag changes, and can be refreshed', async (context) => {

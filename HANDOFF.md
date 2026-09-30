@@ -17,10 +17,10 @@ type and a Session-header button.
 | Package | `@xmwengxing/dsh-client-ui-sidebar-perfmon` (kind `perfmon`) |
 | Repository | https://github.com/xmwengxing/dsh-client-ui-sidebar-perfmon |
 | Target | `dsh` **0.2.0-rc.1**, Node 24, npm 11, pnpm 12 |
-| Source version | **0.2.2** |
-| Published on npm | 0.2.0, **0.2.2** — public, zero runtime dependencies |
-| GitHub Releases | v0.1.0, v0.2.0, v0.2.1, **v0.2.2** (latest, carries the tarball) |
-| Tests | 51 specs across 5 files, all passing via `npm test` |
+| Source version | **0.3.0** |
+| Published on npm | 0.2.0, 0.2.2 — public, zero runtime dependencies |
+| GitHub Releases | v0.1.0, v0.2.0, v0.2.1, v0.2.2 (latest published) |
+| Tests | 78 specs across 6 files, all passing via `npm test` |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
 
@@ -34,6 +34,7 @@ Relative to the repository root.
 | --- | --- | --- |
 | `src/host/index.js` | 146 | The Cordis plugin. Resolves config, selects a reader, registers `POST /api/perfmon.snapshot` on Connection's shared authenticated channel, and owns the route's lifetime. |
 | `src/host/metrics.js` | 271 | Platform-agnostic core: `hostFacts()`, `derive()` (differencing), `sortProcesses()`, `createSampler()`. **This is where the arithmetic lives.** |
+| `src/host/du.js` | The directory scan controller: manual start/stop, an `AbortSignal` through every `readdir`/`lstat`, the viewed session's workspace (a start may name the folder explicitly; the open sessions' folders are the fallback), deduplication and drop accounting, and a stored last reading the poll serves without filesystem work. |
 | `src/host/readers/index.js` | 40 | Reader selection per `process.platform`, plus the display label. |
 | `src/host/readers/linux.js` | 186 | `/proc` reader — the only one that spawns nothing. Exports its three parsers. |
 | `src/host/readers/darwin.js` | 238 | macOS: `os.cpus()` + `vm_stat` + `sysctl vm.swapusage` + `ps`. Exports its parsers. |
@@ -48,7 +49,7 @@ Relative to the repository root.
 | --- | --- | --- |
 | `src/client/index.jsx` | 118 | The client plugin: registers the tab type + guide entry, the panel body, and the header button. No `inject` list — services are resolved late through `ctx.inject`. |
 | `src/client/PerfmonBody.jsx` | 189 | The tab body: refresh loop, warnings notice, composes the two cards. |
-| `src/client/GaugePanel.jsx` | 172 | Resource window (three ring gauges). Exports `GAUGE_RING`. |
+| `src/client/GaugePanel.jsx` | 240 | Resource window (three ring gauges plus the project-directory line with its start/stop scan button). Exports `GAUGE_RING`, `DiskPanel`. |
 | `src/client/ProcessPanel.jsx` | 443 | Process window: the sort tags that double as column headers, the resizable column dividers, the search field, the rows. Exports `SORT_TAGS`, `COLUMN_LIMITS`, `clampColumnWidth`, `readStoredWidths`. |
 | `src/client/HeaderButton.jsx` | 42 | The Session-header control. |
 | `src/client/Icon.jsx` | 41 | The perfmon glyph. |
@@ -72,6 +73,7 @@ Relative to the repository root.
 | `test/metrics.test.mjs` | 242 | Differencing arithmetic against hand-built samples, plus live Linux checks (sampler, unit consistency). |
 | `test/panel.test.mjs` | 534 | Behavioural specs through `react-test-renderer`: gauges, tags, sorting, filtering, refresh, errors, all-unavailable readings, search field, column resizing. |
 | `test/readers.test.mjs` | 286 | Every platform parser against captured tool output, and every reader's failure path through an injected runner. |
+| `test/du.test.mjs` | 284 | The scan controller: nothing starts implicitly, a stop lands between syscalls, the stored reading costs no filesystem work, budget/symlink/deduplication/drop rules, config resolution. |
 | `test/support/entry.jsx` | 31 | Re-exports the internals the specs drive. Not published. |
 | `README.md` / `README.zh-CN.md` | 254 / 216 | User-facing: features, install (3 paths), platform support matrix, how the numbers are produced, configuration. |
 | `CHANGELOG.md` | 76 | Per-version notes. The release workflow extracts the matching section for GitHub Release notes. |
@@ -139,11 +141,36 @@ Response:
     "cpu": { "percent", "coreCount", "cores": [{ "id", "percent" }], "loadAverage": [n,n,n] | null },
     "memory": { "total", "used", "available", "free", "cached", "buffers", "percent",
                 "swapTotal", "swapUsed", "swapFree", "swapPercent" } | null,
+    "disk": {
+      "projectDir": "/path" | null, "projectDirs": [{ "dir", "bytes", "entries", "truncated", "warnings" }],
+      "projectBytes": 123 | null, "projectEntries": 0, "projectTruncated": false,
+      "droppedDirCount": 0, "status": "idle" | "scanning" | "done" | "hidden", "warnings": []
+    },
     "processes": [{ "pid", "name", "state", "threads", "rssBytes", "memPercent", "cpuPercent" }],
     "processCount": 0, "sort": "cpu", "warnings": [], "reader": "linux", "refreshIntervalMs": 2000
   }
 }
 ```
+
+`disk.projectBytes` sums the last scan's measured folders; `null` means none
+answered, never zero. **The scan is manual**: the panel sends `measure: true`
+(start) or `measure: false` (stop) on the same route, and a start may name
+`"session": "<id>"` — the session the GUI is viewing. The host resolves that id
+through the live session store (`sessions.get()`) and, when the id is only a
+cold record there (the sidebar lists sessions whose home process never entered
+them into this process's store), through `sessionQuery.observeSession()`; its
+`header.cwd` is the folder the scan walks. A start without a session falls back
+to the open sessions' folders; a named id that resolves to nothing answers
+`project-dir-session-unresolved` instead of scanning the wrong folder. The poll
+reads only the stored state — no filesystem work on the 2-second cadence. A
+stop aborts within one syscall and publishes partial figures with
+`project-dir-aborted`. A string `projectDir` pins one folder (overriding every
+derivation) and `''`/`false` hides the line (`status: "hidden"`). Bounded by
+`projectDirEntryBudget` (50k entries/folder → `project-dir-partial`) and
+`projectDirMaxDirs` (12 folders → `droppedDirCount` +
+`project-dir-dropped`); an unreadable subfolder says `project-dir-skipped`, an
+unreadable root is `null` bytes with `project-dir-unavailable`. Symlinks are
+neither followed nor counted.
 
 Every numeric field except `pid`/`rssBytes` may be `null`. `state` and `threads`
 are `null` on Windows; `loadAverage` is `null` on Windows; `memory` is `null` when
@@ -262,6 +289,31 @@ Read this section before editing. Every item below was an actual failure.
 9. **The client bundle id must equal the package name** — the module loader validates
    it. `scripts/build.mjs` reads the name from `package.json` rather than repeating it.
 
+9b. **A bare `ctx.<service>` read throws `cannot get property … without inject`** in
+   Cordis unless the plugin declares the service in `inject` — and the throw is easy
+   to swallow in a `try/catch`, which turns a missing declaration into a silent empty
+   answer (this exact bug made the session store read `[]` for weeks). For optional
+   services, capture them through `ctx.inject(['name'], (serviceCtx) => { ref =
+   serviceCtx.name })` instead: the callback only runs when the service exists, so a
+   deployment without it leaves the reference unset and the feature degrades instead
+   of hanging the boot.
+
+9c. **The GUI sidebar's "open" sessions are mostly cold records.** The Session list
+   UI reads `sessionQuery.listSessions()` (live + persisted, newest-first), and merely
+   viewing a session never enters it into this process's live store —
+   `ctx.sessions.list()` answers only sessions *created or entered in-process*. Any
+   feature that promises "the session the user is looking at" must take the session id
+   from the client (session-scoped slots inject `sessionId`; the right Sidebar also
+   publishes `ctx.sidebarRight.mounted`) and resolve it host-side through
+   `sessions.get()` → `sessionQuery.observeSession()`.
+
+9d. **A control flag mirrored into React state re-sends itself on every render.** The
+   measure button held its flag in a ref *and* a state copy; the render body kept
+   rewriting the ref from state, so every 2-second poll carried `measure: true` again
+   and each one aborted the scan the previous request started — the scan never
+   finished. A "consume exactly once" flag lives in a ref alone; state is only for
+   what the next render should show.
+
 10. **The release asset name must stay version-free.** The plugin list points at
     `releases/latest/download/dsh-client-ui-sidebar-perfmon.tgz`, which resolves
     `latest` at request time but takes the filename literally; a versioned name
@@ -293,6 +345,7 @@ Read this section before editing. Every item below was an actual failure.
 | **Community-list PR** | Not submitted. `contrib/submit-pr.sh` does it in one command and refuses until the repository is 24h old — created `2026-09-29T07:51:27Z`, so eligible from **`2026-09-30T07:51:27Z`** (Beijing 15:51). The entry file is ready; do **not** hand-add an `npm:` key to it, npm↔repo mapping is collected automatically and a hand-written key is rejected. |
 | **npm trusted publishing** | The workflow is written but the npm-side setting is **not configured**, so a tag push currently fails at the publish step. One-time: npmjs.com → package → Settings → Trusted Publisher → GitHub Actions → repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank. Details in `RELEASING.md`. |
 | **macOS and Windows on real hardware** | **Untested by the author.** Covered by parser specs over captured tool output and by injected failure paths, but never run on those systems. If a field is wrong there, the panel's `warnings` list names it. Lifting this is the single most valuable next step. |
+| **pm2-managed web service** | The real GUI runs under pm2 as `deepseek-harness-webui`; host-half changes need a `pm2 restart` of it (schedule detached, see trap 5), never an inline restart during a turn. A throwaway `dsh --profile web --port 3099 --no-open` instance (via `setsid nohup … & disown`, so it survives the turn) is the way to verify the route without touching pm2. |
 | No history / sparklines | The panel shows the present reading only. |
 | No per-process user, command line or tree view | Rows carry name, PID, state, threads, CPU, RSS. |
 | Polling, not streaming | One request per interval; a push channel would need the Gateway. |

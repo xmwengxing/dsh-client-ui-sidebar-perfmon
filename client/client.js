@@ -42,6 +42,17 @@ var ZH = {
   headerButtonOpen: "\u6253\u5F00\u6027\u80FD\u76D1\u63A7\u9762\u677F",
   resources: "\u8D44\u6E90\u5360\u7528",
   processes: "\u8FDB\u7A0B\u5217\u8868",
+  projectDir: "\u9879\u76EE\u76EE\u5F55",
+  measureStart: "\u7EDF\u8BA1\u5F53\u524D\u4F1A\u8BDD\u76EE\u5F55",
+  measureStartSession: "\u7EDF\u8BA1\u5F53\u524D\u4F1A\u8BDD\u7684\u76EE\u5F55\uFF08{id}\uFF09",
+  measureStop: "\u505C\u6B62\u7EDF\u8BA1",
+  measuring: "\u6B63\u5728\u7EDF\u8BA1\u2026",
+  measuringHint: "\u53EA\u7EDF\u8BA1\u5F53\u524D\u67E5\u770B\u7684\u4F1A\u8BDD\u76EE\u5F55 \xB7 \u53EF\u968F\u65F6\u505C\u6B62",
+  projectUsage: "{size} \xB7 {count} \u9879",
+  projectDirCount: "{count} \u4E2A\u76EE\u5F55",
+  projectDropped: "\u53E6\u6709 {count} \u4E2A\u76EE\u5F55\u672A\u7EDF\u8BA1",
+  projectTruncated: "\u5DF2\u622A\u65AD",
+  projectPartial: "\u90E8\u5206\u5B8C\u6210\uFF08\u5DF2\u505C\u6B62\uFF09",
   cpu: "CPU",
   memory: "\u5185\u5B58",
   swap: "\u4EA4\u6362\u5185\u5B58",
@@ -100,7 +111,15 @@ var ZH = {
     "processes-unavailable": "\u8FDB\u7A0B\u5217\u8868\u4E0D\u53EF\u7528",
     "powershell-missing": "\u672A\u627E\u5230 PowerShell\uFF0C\u65E0\u6CD5\u8BFB\u53D6\u8FDB\u7A0B\u4E0E\u5185\u5B58",
     "windows-json-unreadable": "PowerShell \u8F93\u51FA\u65E0\u6CD5\u89E3\u6790",
-    "generic-platform": "\u5F53\u524D\u5E73\u53F0\u6CA1\u6709\u4E13\u7528\u8BFB\u53D6\u5668\uFF0C\u4EC5\u663E\u793A\u6807\u51C6\u5E93\u80FD\u63D0\u4F9B\u7684\u6570\u636E"
+    "generic-platform": "\u5F53\u524D\u5E73\u53F0\u6CA1\u6709\u4E13\u7528\u8BFB\u53D6\u5668\uFF0C\u4EC5\u663E\u793A\u6807\u51C6\u5E93\u80FD\u63D0\u4F9B\u7684\u6570\u636E",
+    "project-dir-no-cwd": "\u5C1A\u672A\u7EDF\u8BA1\u2014\u2014\u70B9\u51FB\u53F3\u4FA7\u6309\u94AE\u7EDF\u8BA1\u5F53\u524D\u4F1A\u8BDD\u7684\u76EE\u5F55",
+    "project-dir-session-unresolved": "\u65E0\u6CD5\u786E\u5B9A\u5F53\u524D\u4F1A\u8BDD\u7684\u76EE\u5F55\uFF0C\u672A\u5F00\u59CB\u7EDF\u8BA1",
+    "project-dir-unavailable": "\u9879\u76EE\u76EE\u5F55\u4E0D\u53EF\u8BFB\uFF0C\u65E0\u6CD5\u7EDF\u8BA1\u5927\u5C0F",
+    "project-dir-aborted": "\u7EDF\u8BA1\u5DF2\u505C\u6B62\uFF0C\u6570\u503C\u4E3A\u90E8\u5206\u7ED3\u679C",
+    "project-dir-hidden": "\u76EE\u5F55\u5927\u5C0F\u7EDF\u8BA1\u5DF2\u5728\u914D\u7F6E\u4E2D\u5173\u95ED",
+    "project-dir-partial": "\u76EE\u5F55\u6761\u76EE\u8FC7\u591A\uFF0C\u7EDF\u8BA1\u5DF2\u63D0\u524D\u622A\u65AD\uFF0C\u5B9E\u9645\u5360\u7528\u53EF\u80FD\u66F4\u5927",
+    "project-dir-skipped": "\u90E8\u5206\u5B50\u76EE\u5F55\u4E0D\u53EF\u8BFB\uFF0C\u76EE\u5F55\u5927\u5C0F\u7EDF\u8BA1\u504F\u4F4E",
+    "project-dir-dropped": "\u6D3B\u8DC3\u5DE5\u4F5C\u533A\u76EE\u5F55\u8FC7\u591A\uFF0C\u4EC5\u7EDF\u8BA1\u5176\u4E2D\u4E00\u90E8\u5206"
   }
 };
 var EN = {
@@ -111,6 +130,17 @@ var EN = {
   headerButtonOpen: "Open the performance monitor",
   resources: "Resource usage",
   processes: "Processes",
+  projectDir: "Project folder",
+  measureStart: "Measure the current session folders",
+  measureStartSession: "Measure the current session folders ({id})",
+  measureStop: "Stop measuring",
+  measuring: "Measuring\u2026",
+  measuringHint: "Only the viewed session folders \xB7 stoppable any time",
+  projectUsage: "{size} \xB7 {count} items",
+  projectDirCount: "{count} folders",
+  projectDropped: "{count} more folders not measured",
+  projectTruncated: "partial",
+  projectPartial: "partial (stopped)",
   cpu: "CPU",
   memory: "Memory",
   swap: "Swap",
@@ -169,7 +199,15 @@ var EN = {
     "processes-unavailable": "The process list is unavailable",
     "powershell-missing": "PowerShell was not found, so processes and memory cannot be read",
     "windows-json-unreadable": "The PowerShell output could not be parsed",
-    "generic-platform": "No dedicated reader for this platform; only standard-library figures are shown"
+    "generic-platform": "No dedicated reader for this platform; only standard-library figures are shown",
+    "project-dir-no-cwd": "Not measured yet \u2014 use the button to measure the current session folders",
+    "project-dir-session-unresolved": "The current session folder could not be determined, so nothing was measured",
+    "project-dir-unavailable": "The project folder could not be read",
+    "project-dir-aborted": "The scan was stopped; the figures are partial",
+    "project-dir-hidden": "Folder-size metering is disabled in the configuration",
+    "project-dir-partial": "A folder has too many entries; the scan stopped early and the total may be low",
+    "project-dir-skipped": "Some subfolders could not be read, so folder sizes are understated",
+    "project-dir-dropped": "More open workspaces than one scan covers; only some were measured"
   }
 };
 function resolveLanguage() {
@@ -315,6 +353,77 @@ var STYLES = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The project-directory line sits under the gauges, inside the resource card.
+   The card is a flex column that must keep its own height, so this row is fixed:
+   a shrinking child here is the same squeeze that twice bit the search field. */
+.dsh-perfmon-disk {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px 9px;
+  border-block-start: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.22));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-diskLabel {
+  color: var(--dsw-alias-label-secondary, currentColor);
+  white-space: nowrap;
+}
+
+.dsh-perfmon-diskValue {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The no-answer-yet spinner: a quarter arc that turns inside the value's box,
+   so the row's height and baseline stay exactly the same as when a size shows. */
+.dsh-perfmon-diskSpinner {
+  box-sizing: border-box;
+  inline-size: 11px;
+  block-size: 11px;
+  border: 1.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
+  border-block-start-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  border-radius: 50%;
+  animation: dsh-perfmon-spin 0.9s linear infinite;
+  align-self: center;
+}
+
+@keyframes dsh-perfmon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dsh-perfmon-diskDetail {
+  color: var(--dsw-alias-label-tertiary, currentColor);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-perfmon-diskAction {
+  flex: none;
+  margin-inline-start: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, transparent);
+  color: var(--dsw-alias-label-secondary, currentColor);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dsh-perfmon-diskAction:hover {
+  color: var(--dsw-alias-label-primary, currentColor);
+  border-color: var(--dsw-alias-border-l3, rgba(127, 127, 127, 0.34));
 }
 
 /* The tag row and the data rows share one template, so every tag is the header
@@ -730,10 +839,13 @@ var import_react3 = require("react");
 // src/client/api.js
 var SNAPSHOT_PATH = "/api/perfmon.snapshot";
 async function fetchSnapshot(request = {}) {
+  const body = { sort: request.sort, limit: request.limit };
+  if (request.measure === true || request.measure === false) body.measure = request.measure;
+  if (typeof request.session === "string" && request.session !== "") body.session = request.session;
   const response = await fetch(SNAPSHOT_PATH, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sort: request.sort, limit: request.limit }),
+    body: JSON.stringify(body),
     credentials: "same-origin",
     signal: request.signal
   });
@@ -841,7 +953,56 @@ function Gauge({ label, percent, detail, tone, title }) {
     (0, import_react.createElement)("span", { className: "dsh-perfmon-gaugeDetail", title: detail }, detail)
   );
 }
-function GaugePanel({ reading, t }) {
+function DiskPanel({ disk, warnings = [], sessionId, measure, t }) {
+  if (disk == null) return null;
+  if (disk.status === "hidden") return null;
+  const running = measure?.running === true;
+  const known = typeof disk.projectBytes === "number" && Number.isFinite(disk.projectBytes);
+  const aborted = Array.isArray(disk.warnings) && disk.warnings.includes("project-dir-aborted");
+  const warning = Array.isArray(disk.warnings) && disk.warnings.find((code) => code !== "project-dir-aborted") || warnings[0];
+  const note = typeof warning === "string" ? describeWarning(t, warning) : void 0;
+  const abortNote = aborted ? t("projectPartial") : void 0;
+  const detail = known ? t("projectUsage", {
+    size: formatBytes(disk.projectBytes),
+    count: String(disk.projectEntries ?? 0)
+  }) : running ? t("measuring") : note ?? EMPTY;
+  const folders = Array.isArray(disk.projectDirs) ? disk.projectDirs : [];
+  const dirCount = folders.length > 0 ? folders.length : void 0;
+  const dirNames = folders.map((entry) => entry?.dir).filter((dir) => typeof dir === "string");
+  const dropped = known && typeof disk.droppedDirCount === "number" && disk.droppedDirCount > 0 ? t("projectDropped", { count: String(disk.droppedDirCount) }) : void 0;
+  const tail = known ? [
+    dirCount === void 0 ? void 0 : t("projectDirCount", { count: String(dirCount) }),
+    disk.projectTruncated === true ? t("projectTruncated") : void 0,
+    abortNote,
+    dropped,
+    // Without a dropped count, a single-folder reading's own first warning
+    // (partial, skipped) still belongs beside the figure it qualifies.
+    dirCount === void 0 && dropped === void 0 ? note ?? "" : void 0
+  ].filter((part) => part !== void 0).filter((part) => part !== "").map((part) => ` \xB7 ${part}`).join("") : running ? ` \xB7 ${t("measuringHint")}` : "";
+  const titleParts = dirNames.length > 0 ? dirNames : [];
+  const titleDetail = known ? [detail, note].filter((part) => part !== void 0).join(" \xB7 ") : note;
+  const title = [...titleParts, titleDetail].filter((part) => part !== void 0).join("\n");
+  return (0, import_react.createElement)(
+    "div",
+    { className: "dsh-perfmon-disk", title },
+    (0, import_react.createElement)("span", { className: "dsh-perfmon-diskLabel" }, t("projectDir")),
+    running ? (0, import_react.createElement)("span", { className: "dsh-perfmon-diskSpinner", role: "status", "aria-label": t("measuring") }) : (0, import_react.createElement)("span", { className: "dsh-perfmon-diskValue" }, known ? formatBytes(disk.projectBytes) : EMPTY),
+    (0, import_react.createElement)("span", { className: "dsh-perfmon-diskDetail" }, detail + tail),
+    (0, import_react.createElement)(
+      "button",
+      {
+        type: "button",
+        className: "dsh-perfmon-diskAction",
+        onClick: running ? measure?.onStop : measure?.onStart,
+        title: running ? t("measureStop") : sessionId === void 0 ? t("measureStart") : t("measureStartSession", { id: sessionId })
+      },
+      running ? t("measureStop") : t("measureStart")
+    )
+  );
+}
+function GaugePanel(props) {
+  const reading = props.reading;
+  const t = props.t;
   const cpu = reading?.cpu;
   const memory = reading?.memory;
   const facts = reading?.facts;
@@ -903,7 +1064,13 @@ function GaugePanel({ reading, t }) {
         tone: "var(--dsw-alias-state-business-primary, #6b7bd6)",
         title: swapDetail
       })
-    )
+    ),
+    (0, import_react.createElement)(DiskPanel, {
+      disk: reading?.disk,
+      warnings: reading?.warnings,
+      measure: props.measure,
+      t
+    })
   );
 }
 
@@ -1241,13 +1408,33 @@ var DEFAULT_LIMIT = 60;
 function isHidden() {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
-function PerfmonBody({ t, load = fetchSnapshot }) {
+function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
   const [sort, setSort] = (0, import_react3.useState)("cpu");
   const [nonce, setNonce] = (0, import_react3.useState)(0);
   const [state, setState] = (0, import_react3.useState)({ status: "loading", reading: void 0, error: void 0, intervalMs: DEFAULT_INTERVAL_MS });
   const aliveRef = (0, import_react3.useRef)(true);
   const sortRef = (0, import_react3.useRef)(sort);
   sortRef.current = sort;
+  const measureRef = (0, import_react3.useRef)(null);
+  const fallbackSessionId = (0, import_react3.useSyncExternalStore)(
+    (0, import_react3.useCallback)(
+      (onStoreChange) => {
+        const mounted = ctx?.get?.("sidebarRight")?.mounted;
+        if (mounted === void 0 || mounted === null) return () => {
+        };
+        return mounted.subscribe(onStoreChange);
+      },
+      [ctx]
+    ),
+    () => {
+      const mounted = ctx?.get?.("sidebarRight")?.mounted?.getSnapshot?.();
+      return typeof mounted === "string" ? mounted : void 0;
+    },
+    () => void 0
+  );
+  const activeSessionId = typeof sessionId === "string" && sessionId !== "" ? sessionId : fallbackSessionId;
+  const sessionRef = (0, import_react3.useRef)(activeSessionId);
+  sessionRef.current = activeSessionId;
   (0, import_react3.useEffect)(() => {
     aliveRef.current = true;
     return () => {
@@ -1269,10 +1456,14 @@ function PerfmonBody({ t, load = fetchSnapshot }) {
       }
       controller = new AbortController();
       const requestedSort = sortRef.current;
+      const measure = measureRef.current;
+      measureRef.current = null;
       try {
         const reading2 = await load({
           sort: requestedSort,
           limit: requestedSort === "name" ? NAME_SORT_LIMIT : DEFAULT_LIMIT,
+          measure,
+          session: measure === true ? sessionRef.current : void 0,
           signal: controller.signal
         });
         if (stopped || !aliveRef.current) return;
@@ -1317,6 +1508,10 @@ function PerfmonBody({ t, load = fetchSnapshot }) {
   const refresh = (0, import_react3.useCallback)(() => {
     setNonce((value) => value + 1);
   }, []);
+  const setMeasure = (0, import_react3.useCallback)((value) => {
+    measureRef.current = value;
+    setNonce((n) => n + 1);
+  }, []);
   const { reading, status, error, intervalMs } = state;
   const failed = status === "error";
   return (0, import_react3.createElement)(
@@ -1333,7 +1528,16 @@ function PerfmonBody({ t, load = fetchSnapshot }) {
       )
     ) : null,
     status === "loading" && reading === void 0 ? (0, import_react3.createElement)("div", { className: "dsh-perfmon-empty" }, t("loading")) : null,
-    reading === void 0 ? null : (0, import_react3.createElement)(GaugePanel, { reading, t }),
+    reading === void 0 ? null : (0, import_react3.createElement)(GaugePanel, {
+      reading,
+      t,
+      sessionId: activeSessionId,
+      measure: {
+        running: reading?.disk?.status === "scanning",
+        onStart: () => setMeasure(true),
+        onStop: () => setMeasure(false)
+      }
+    }),
     // A platform that cannot answer a field says so here rather than leaving the
     // panel silently short of a number.
     Array.isArray(reading?.warnings) && reading.warnings.length > 0 ? (0, import_react3.createElement)(
@@ -1398,7 +1602,7 @@ function PerfmonIcon({ size = 16, className }) {
 }
 
 // src/client/HeaderButton.jsx
-function HeaderButton({ open, t }) {
+function HeaderButton({ sessionId, open, t }) {
   const label = t("headerButton");
   return (0, import_react5.createElement)(
     "button",
@@ -1408,7 +1612,7 @@ function HeaderButton({ open, t }) {
       title: t("headerButtonOpen"),
       "aria-label": t("headerButtonOpen"),
       onClick: () => {
-        open();
+        open(sessionId);
       }
     },
     (0, import_react5.createElement)(PerfmonIcon, { size: 15 }),
@@ -1435,9 +1639,12 @@ function apply(ctx) {
           order: HEADER_ORDER,
           inject: () => ({
             t,
-            open: () => {
+            // The seat is session-scoped, so `sessionId` is the session whose
+            // header row the button sits in — the folder meter measures that
+            // session's workspace, not whichever session the live store holds.
+            open: (sessionId) => {
               try {
-                ctx.get("sidebarRight")?.openTab(PERFMON_KIND);
+                ctx.get("sidebarRight")?.openTab(PERFMON_KIND, { params: { sessionId } });
               } catch (error) {
                 ctx.logger?.warn?.("perfmon: could not open the monitor page: %s", error?.message ?? String(error));
               }

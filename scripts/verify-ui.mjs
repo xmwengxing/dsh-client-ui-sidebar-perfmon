@@ -169,6 +169,13 @@ const SNAPSHOT = `(() => {
       mem: cell(row.querySelectorAll('.dsh-perfmon-metric')[1]),
     })),
     foot: root.querySelector('.dsh-perfmon-foot').textContent,
+    disk: root.querySelector('.dsh-perfmon-disk')
+      ? {
+          label: root.querySelector('.dsh-perfmon-diskLabel')?.textContent ?? null,
+          value: root.querySelector('.dsh-perfmon-diskValue')?.textContent ?? null,
+          detail: root.querySelector('.dsh-perfmon-diskDetail')?.textContent ?? null,
+        }
+      : null,
     notice: root.querySelector('.dsh-perfmon-notice') ? root.querySelector('.dsh-perfmon-notice').textContent : null,
   };
 })()`

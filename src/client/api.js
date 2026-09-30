@@ -15,15 +15,25 @@ export const SNAPSHOT_PATH = '/api/perfmon.snapshot'
 
 /**
  * Request one snapshot from the host.
- * @param {{sort?: string, limit?: number, signal?: AbortSignal}} [request] - ordering and page size.
+ *
+ * `measure` rides the same request: `true` starts the directory scan, `false`
+ * stops a running one, and `undefined` just polls. `session` names the session
+ * whose workspace the start should measure — the sidebar shows sessions whose
+ * home process never entered them into the host's live store, so the folder
+ * cannot be derived host-side. The scan itself runs on the host across polls —
+ * an ordinary poll carries no filesystem work at all.
+ * @param {{sort?: string, limit?: number, measure?: boolean, session?: string, signal?: AbortSignal}} [request] - ordering, page size, the scan control, and the session to measure.
  * @returns {Promise<object>} the host's reading.
  * @throws {Error} when the transport fails or the host reports a failure.
  */
 export async function fetchSnapshot(request = {}) {
+  const body = { sort: request.sort, limit: request.limit }
+  if (request.measure === true || request.measure === false) body.measure = request.measure
+  if (typeof request.session === 'string' && request.session !== '') body.session = request.session
   const response = await fetch(SNAPSHOT_PATH, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sort: request.sort, limit: request.limit }),
+    body: JSON.stringify(body),
     credentials: 'same-origin',
     signal: request.signal,
   })

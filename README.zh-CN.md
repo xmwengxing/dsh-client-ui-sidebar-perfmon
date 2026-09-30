@@ -94,10 +94,14 @@ dsh --profile web --dump-config | grep -A2 perfmon
 - id: perfmon
   name: '@xmwengxing/dsh-client-ui-sidebar-perfmon'
   config:
-    refreshIntervalMs: 1000   # 500–60000，默认 Linux 2000 / macOS 3000 / Windows 4000
-    processLimit: 100         # 5–500，单次返回的进程行数
-    cacheMillis: 800          # 0–10000，该窗口内的轮询共享同一次读取
-    sampleMillis: 150         # 0–2000，首次读数的预热采样时长
+    refreshIntervalMs: 1000        # 500–60000，默认 Linux 2000 / macOS 3000 / Windows 4000
+    processLimit: 100              # 5–500，单次返回的进程行数
+    cacheMillis: 800               # 0–10000，该窗口内的轮询共享同一次读取
+    sampleMillis: 150              # 0–2000，首次读数的预热采样时长
+    projectDirEntryBudget: 50000   # 100–1000000，单个目录一次扫描的条目上限
+    projectDirMaxDirs: 12          # 1–100，一次扫描覆盖的 distinct 目录数
+    # projectDir: /srv/demo        # 固定扫描某个目录，而不是跟随当前查看的会话
+    # projectDir: ''               # 或完全隐藏目录大小行
 ```
 
 ## 平台支持
@@ -114,6 +118,7 @@ dsh --profile web --dump-config | grep -A2 perfmon
 | 进程列表 | `/proc/<pid>/stat`，进程内读取 | `ps -Ao pid=,state=,time=,rss=,comm=` | 一次 PowerShell 调用 |
 | 进程状态 | 有 | 有 | **无**——显示为 `—` |
 | 线程数 | 有 | **无**——BSD `ps` 没有可移植的线程数字段 | 有 |
+| 项目目录大小 | 进程内遍历，三个平台一致 | 同左 | 同左 |
 
 平台无法提供的字段一律上报 `null` 并在面板显示 `—`，同时在面板中列出原因。
 任何字段都不会用 0 顶替——因为 0 看起来像一次真实测量。
@@ -148,6 +153,17 @@ dsh --profile web --dump-config | grep -A2 perfmon
 
 - **本窗口内新出现的进程**没有可作差的上一帧，其 CPU 单元格在下一次轮询前显示 `—`。
 - **未启用交换内存的主机**显示“未启用”，而不是一个 0% 的空环。
+
+仪表盘下方的**项目目录**行**按需统计**：目录遍历是 CPU 与 IO 密集型工作——
+停在用户主目录的会话可能有几十万条目——因此面板绝不隐式启动扫描。该行自带
+一个按钮，统计**当前正在查看的会话**的工作目录：浏览器在启动请求里携带会话 id，
+宿主经活跃会话存储解析 `session.header.cwd`；GUI 侧栏里“正在查看”的会话大多是
+冷会话（其归属进程从未把它进入本进程的活跃存储），因此宿主会退回到
+session-query 服务读取冷记录的 cwd。扫描进行中按钮变为“停止”，且停止落点在
+单次文件系统调用之内，已统计的部分结果会带“已停止”说明保留显示。扫描完成后的
+读数一直保留到下次扫描替换为止。常规轮询只读存储结果——面板开着在两次扫描之间
+零开销。扫描有上限（单目录 5 万条目、单次 12 个目录）、符号链接既不跟随也不计入，
+每一处省略都在数字旁说明，而不是默默夸大准确性。
 
 ## 接入方式
 

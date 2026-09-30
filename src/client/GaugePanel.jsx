@@ -11,6 +11,7 @@
 
 import { createElement as h } from 'react'
 import { barWidth, EMPTY, formatBytes, formatDuration, formatPercent } from './format.js'
+import { describeWarning } from './copy.js'
 
 /**
  * Ring geometry.
@@ -74,11 +75,94 @@ function Gauge({ label, percent, detail, tone, title }) {
 }
 
 /**
+ * The project-directory line.
+ *
+ * It is a row of facts, not a ring: there is no meaningful "percent used" for a
+ * folder, so a fourth gauge would either be decorative or invented. The scan is
+ * manual: the row carries one button that starts a scan over the viewed
+ * session's workspace folder and turns into a stop button while it runs. A
+ * folder the size of a home directory is far too heavy to walk implicitly, so
+ * until the user asks, the row says exactly that — and a finished reading stays
+ * until the next scan replaces it. The bilingual `warnings` list below the card
+ * says why a figure is partial or absent.
+ *
+ * @param {{disk: object | undefined, warnings: string[] | undefined, sessionId: string | undefined, measure: {running: boolean, onStart: Function, onStop: Function}, t: Function}} props - the disk reading, scan control, and translator.
+ * @returns {import('react').ReactNode} the row, or nothing when the line is hidden by config.
+ */
+export function DiskPanel({ disk, warnings = [], sessionId, measure, t }) {
+  if (disk == null) return null
+  if (disk.status === 'hidden') return null
+  const running = measure?.running === true
+  const known = typeof disk.projectBytes === 'number' && Number.isFinite(disk.projectBytes)
+  const aborted = Array.isArray(disk.warnings) && disk.warnings.includes('project-dir-aborted')
+  const warning = (Array.isArray(disk.warnings) && disk.warnings.find((code) => code !== 'project-dir-aborted')) || warnings[0]
+  const note = typeof warning === 'string' ? describeWarning(t, warning) : undefined
+  const abortNote = aborted ? t('projectPartial') : undefined
+  const detail = known
+    ? t('projectUsage', {
+        size: formatBytes(disk.projectBytes),
+        count: String(disk.projectEntries ?? 0),
+      })
+    : running
+      ? t('measuring')
+      : (note ?? EMPTY)
+  const folders = Array.isArray(disk.projectDirs) ? disk.projectDirs : []
+  const dirCount = folders.length > 0 ? folders.length : undefined
+  const dirNames = folders.map((entry) => entry?.dir).filter((dir) => typeof dir === 'string')
+  const dropped =
+    known && typeof disk.droppedDirCount === 'number' && disk.droppedDirCount > 0
+      ? t('projectDropped', { count: String(disk.droppedDirCount) })
+      : undefined
+  const tail = known
+    ? [
+        dirCount === undefined ? undefined : t('projectDirCount', { count: String(dirCount) }),
+        disk.projectTruncated === true ? t('projectTruncated') : undefined,
+        abortNote,
+        dropped,
+        // Without a dropped count, a single-folder reading's own first warning
+        // (partial, skipped) still belongs beside the figure it qualifies.
+        dirCount === undefined && dropped === undefined ? (note ?? '') : undefined,
+      ]
+        .filter((part) => part !== undefined)
+        .filter((part) => part !== '')
+        .map((part) => ` · ${part}`)
+        .join('')
+    : running
+      ? ` · ${t('measuringHint')}`
+      : ''
+  // The tooltip carries the whole answer: every folder with its own size.
+  const titleParts = dirNames.length > 0 ? dirNames : []
+  const titleDetail = known ? [detail, note].filter((part) => part !== undefined).join(' · ') : note
+  const title = [...titleParts, titleDetail].filter((part) => part !== undefined).join('\n')
+  return h(
+    'div',
+    { className: 'dsh-perfmon-disk', title },
+    h('span', { className: 'dsh-perfmon-diskLabel' }, t('projectDir')),
+    running
+      ? h('span', { className: 'dsh-perfmon-diskSpinner', role: 'status', 'aria-label': t('measuring') })
+      : h('span', { className: 'dsh-perfmon-diskValue' }, known ? formatBytes(disk.projectBytes) : EMPTY),
+    h('span', { className: 'dsh-perfmon-diskDetail' }, detail + tail),
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'dsh-perfmon-diskAction',
+        onClick: running ? measure?.onStop : measure?.onStart,
+        title: running ? t('measureStop') : sessionId === undefined ? t('measureStart') : t('measureStartSession', { id: sessionId }),
+      },
+      running ? t('measureStop') : t('measureStart'),
+    ),
+  )
+}
+
+/**
  * Render the resource window.
- * @param {{reading: object | undefined, t: (key: string, values?: object) => string}} props - the current reading and translator.
+ * @param {{reading: object | undefined, measure: object, t: (key: string, values?: object) => string}} props - the current reading, the scan control, and translator.
  * @returns {import('react').ReactNode} the resource card.
  */
-export function GaugePanel({ reading, t }) {
+export function GaugePanel(props) {
+  const reading = props.reading
+  const t = props.t
   const cpu = reading?.cpu
   const memory = reading?.memory
   const facts = reading?.facts
@@ -168,5 +252,11 @@ export function GaugePanel({ reading, t }) {
         title: swapDetail,
       }),
     ),
+    h(DiskPanel, {
+      disk: reading?.disk,
+      warnings: reading?.warnings,
+      measure: props.measure,
+      t,
+    }),
   )
 }

@@ -107,10 +107,14 @@ something else:
 - id: perfmon
   name: '@xmwengxing/dsh-client-ui-sidebar-perfmon'
   config:
-    refreshIntervalMs: 1000   # 500–60000; default 2000 Linux / 3000 macOS / 4000 Windows
-    processLimit: 100         # 5–500; rows served per response
-    cacheMillis: 800          # 0–10000; polls inside this window share one reading
-    sampleMillis: 150         # 0–2000; length of the first reading's priming sample
+    refreshIntervalMs: 1000        # 500–60000; default 2000 Linux / 3000 macOS / 4000 Windows
+    processLimit: 100              # 5–500; rows served per response
+    cacheMillis: 800               # 0–10000; polls inside this window share one reading
+    sampleMillis: 150              # 0–2000; length of the first reading's priming sample
+    projectDirEntryBudget: 50000   # 100–1000000; entries one folder's scan may examine
+    projectDirMaxDirs: 12          # 1–100; distinct folders one scan may cover
+    # projectDir: /srv/demo        # pin one folder instead of the viewed session's workspace
+    # projectDir: ''               # or hide the directory-size line entirely
 ```
 
 ## Platform support
@@ -127,6 +131,7 @@ One reader per platform family, each reading the platform's own source.
 | Process list | `/proc/<pid>/stat`, in-process | `ps -Ao pid=,state=,time=,rss=,comm=` | one PowerShell call |
 | Process state | yes | yes | **no** — shown as `—` |
 | Thread count | yes | **no** — BSD `ps` has no portable keyword | yes |
+| Project-directory size | in-process walk, all three platforms alike | same | same |
 
 Anything a platform cannot answer is reported as `null` and rendered as `—`, with
 the reason listed in the panel. Nothing is filled in with a zero, because a zero
@@ -168,6 +173,23 @@ Two states are reported honestly instead of as zero:
 - A **process first seen in the current window** has no earlier sample to
   difference against, so its CPU cell shows `—` until the next poll.
 - A **host without swap** shows "未启用" rather than an empty ring at 0%.
+
+The **project-directory line** under the gauges is **manual by design**:
+measuring a folder is CPU- and IO-heavy work — a session sitting in a home
+directory can hold hundreds of thousands of entries — so the panel never starts
+a scan implicitly. The line carries a button that scans the workspace folder of
+the session you are viewing (its `session.header.cwd`): the browser sends the
+session id with the start request, and the host resolves it through the live
+session store or, for a session the GUI is only viewing, through the
+session-query service — the sidebar lists cold sessions whose home process
+never entered them into the live store, so the folder cannot be derived
+host-side. While the scan runs the button becomes a stop control, and stopping
+lands within one filesystem round trip, keeping the partial figures with an
+explicit "stopped" note. The finished reading stays until the next scan
+replaces it. The regular polling reads only the stored result — an open panel
+costs nothing between scans. The walk is bounded (50,000 entries per folder, 12
+folders per scan), symlinks are neither followed nor counted, and every
+short-cut is named beside the figure instead of quietly overstating accuracy.
 
 ## How it plugs in
 
