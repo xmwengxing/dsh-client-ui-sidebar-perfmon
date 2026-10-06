@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.2
+
+- **Fixed: the panel never mounted on dsh 0.2.0-rc.2.** The manifest's
+  `dsh.client.inject` listed `@deepseek-ai/dsh-client-ui-slots`, which rc.2
+  turns into a types-only package — it no longer ships a client module. The
+  client loader registers each injected package *before* its consumer, so the
+  perfmon module registered and then waited forever for a bundle that is never
+  served: no guide entry, no panel, no header button, and nothing in any log,
+  while the host half answered perfectly. The `slots` service itself is ambient
+  (every built-in plugin gets it the same way), so the entry is simply removed.
+- **The contract suite now guards this class of drift**: a spec asserts that
+  every package the manifest injects actually ships a `lib/client.js` in the
+  installed dsh — the file the loader serves as its client module.
+
 ## 0.3.1
 
 - **Fixed: the measure button did nothing in the GUI.** The scan derived its

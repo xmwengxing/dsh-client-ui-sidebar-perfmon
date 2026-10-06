@@ -166,3 +166,23 @@ test('the browser half only reaches services that the web profile provides', asy
   const conversationClient = await readFile(join(conversation, 'lib/client.js'), 'utf8')
   assert.ok(conversationClient.length > 0, 'ui-conversation client half is missing')
 })
+
+test('every package the manifest injects ships a client module the loader serves', async () => {
+  const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+  const inject = manifest.dsh?.client?.inject ?? []
+  assert.ok(inject.length > 0, 'the manifest declares no client injects to check')
+  for (const name of inject) {
+    // The client loader registers each injected package before its consumer, so
+    // a types-only dependency (no lib/client.js) leaves this plugin registered
+    // but never applied — no panel, no log, no error anywhere.
+    const dir = await packageDir(name)
+    try {
+      await access(join(dir, 'lib', 'client.js'))
+    } catch {
+      throw new Error(
+        `${name} ships no client module; the loader would never apply this plugin. ` +
+          'Remove it from dsh.client.inject or point the manifest at what loads.',
+      )
+    }
+  }
+})

@@ -338,6 +338,15 @@ Read this section before editing. Every item below was an actual failure.
 14. **`os.loadavg()` returns zeroes on Windows** — publishing `[0,0,0]` would read as
     an idle machine, so the host withholds it as `null`.
 
+15. **`dsh.client.inject` is a load-order contract, not a wish list.** The client
+    loader registers each injected package's client module *before* its consumer.
+    Since dsh 0.2.0-rc.2, `@deepseek-ai/dsh-client-ui-slots` is types-only (no
+    `lib/client.js`): a manifest that names it registers the plugin and then
+    waits forever — no guide entry, no panel, nothing in any log, while the host
+    half answers perfectly. The `slots` service is ambient; built-in plugins do
+    not name the package either. The contract suite asserts every injected
+    package ships a client module.
+
 ## Open work
 
 | Item | State |

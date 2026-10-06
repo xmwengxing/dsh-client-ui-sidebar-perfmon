@@ -81,6 +81,7 @@ jobs:
       # a versioned filename would 404 the moment the next release landed.
       - name: Pack the list's tarball
         run: |
+          mkdir -p dist
           npm pack --pack-destination dist
           mv dist/*.tgz dist/dsh-client-ui-sidebar-perfmon.tgz
           ls -l dist
