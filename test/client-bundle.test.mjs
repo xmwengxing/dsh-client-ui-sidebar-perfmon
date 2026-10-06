@@ -236,7 +236,22 @@ test('the header control receives the translator its label needs', async () => {
   const face = header.definition.inject()
   assert.equal(typeof face.t, 'function', 'the face must carry `t`: the component destructures it')
   assert.equal(typeof face.open, 'function')
-  assert.equal(face.t('headerButton'), '性能监控信息', 'and it must be the plugin translator')
+  // resolveLanguage() reads `<html lang>`, then `navigator.language`, so the
+  // dictionary a call picks depends on the host: Node derives the navigator
+  // language from the system locale, and a locale-less CI runner answers
+  // 'en-US'. Pin it, so this spec always checks the zh dictionary.
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { language: 'zh-CN' },
+    configurable: true,
+    writable: descriptor?.writable ?? true,
+  })
+  try {
+    assert.equal(face.t('headerButton'), '性能监控信息', 'and it must be the plugin translator')
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'navigator', descriptor)
+    else delete globalThis.navigator
+  }
 })
 
 test('every colour in the sheet resolves through a design token', async () => {

@@ -26,7 +26,11 @@ git push origin v0.2.3
 The [`publish`](.github/workflows/publish.yml) workflow then runs the suite,
 publishes to npm with a provenance attestation, and creates the Release with the
 tarball attached, using that version's CHANGELOG section as the notes. It refuses
-to publish when the tag and `package.json` disagree.
+to publish when the tag and `package.json` disagree. The contract specs read the
+dsh they check against, so the workflow installs a pinned `@deepseek-ai/dsh`
+before testing; and a version that is already on npm — a manual publish won the
+race — skips the publish step and just refreshes the release asset, so the run
+still goes green.
 
 `workflow_dispatch` runs the same workflow by hand and defaults to a pack-only dry
 run.
