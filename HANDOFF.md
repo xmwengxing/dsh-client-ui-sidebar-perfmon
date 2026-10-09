@@ -18,10 +18,10 @@ button.
 | Package | `@xmwengxing/dsh-client-ui-sidebar-perfmon` (kind `perfmon`) |
 | Repository | https://github.com/xmwengxing/dsh-client-ui-sidebar-perfmon |
 | Target | `dsh` **0.2.0-rc.1**, Node 24, npm 11, pnpm 12 |
-| Source version | **0.4.0** |
-| Published on npm | 0.2.0, 0.2.2, 0.3.1, **0.3.2, 0.4.0** — public, zero runtime dependencies |
-| GitHub Releases | v0.1.0 … v0.3.1, **v0.4.0** (latest; carries the version-free tarball) |
-| Tests | 128 specs across 7 files, green on Windows (125 pass / 3 linux-only skips) and Linux (128 pass); 38 added in 0.4.0 |
+| Source version | **0.4.1** |
+| Published on npm | 0.2.0, 0.2.2, 0.3.1, 0.3.2, 0.4.0 — public, zero runtime dependencies |
+| GitHub Releases | v0.1.0 … v0.4.0 (latest; carries the version-free tarball) |
+| Tests | 129 specs across 7 files, green on Windows (126 pass / 3 linux-only skips) and Linux (129 pass) |
 | Community list | [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984) — submitted, both checks green, awaiting a maintainer read |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
@@ -55,16 +55,16 @@ Relative to the repository root.
 | File | Lines | What it does |
 | --- | --- | --- |
 | `src/client/index.jsx` | 118 | The client plugin: registers the tab type + guide entry, the panel body, and the header button. No `inject` list — services are resolved late through `ctx.inject`. |
-| `src/client/PerfmonBody.jsx` | 250 | The tab body: refresh loop, warnings notice, composes the three cards. |
+| `src/client/PerfmonBody.jsx` | 251 | The tab body: refresh loop, composes the three cards, and hangs the reading's warnings on the footer's tooltip. |
 | `src/client/GaugePanel.jsx` | 262 | Resource window (three ring gauges plus the project-directory line with its start/stop scan button). Exports `GAUGE_RING`, `DiskPanel`. |
-| `src/client/TemperaturePanel.jsx` | 141 | Temperature window: four tiles (CPU / GPU / board / drives) with their tones. Exports `TEMPERATURE_TILES`, `TEMPERATURE_TONES`, `temperatureTone`. |
+| `src/client/TemperaturePanel.jsx` | 160 | Temperature window: four **two-line** tiles (CPU / GPU / board / drives), each reading + label, with every sensor and the spread in the tooltip. Exports `TEMPERATURE_TILES`, `TEMPERATURE_TONES`, `temperatureTone`. |
 | `src/client/ProcessPanel.jsx` | 443 | Process window: the sort tags that double as column headers, the resizable column dividers, the search field, the rows. Exports `SORT_TAGS`, `COLUMN_LIMITS`, `clampColumnWidth`, `readStoredWidths`. |
 | `src/client/HeaderButton.jsx` | 42 | The Session-header control. |
 | `src/client/Icon.jsx` | 41 | The perfmon glyph. |
 | `src/client/api.js` | 42 | `fetchSnapshot()` — the one call to the host route. Exports `SNAPSHOT_PATH`. |
 | `src/client/copy.js` | 209 | zh/en dictionaries, language resolution, warning translation. No locale service dependency. |
 | `src/client/format.js` | 106 | Byte/percent/duration/clock/temperature formatting; `formatShare` for whole-percent cells. |
-| `src/client/styles.js` | 663 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
+| `src/client/styles.js` | 692 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
 | `client/client.js` | built | Bundled browser half, wrapped in the `window.__ModuleLoader__.load` envelope. **Committed.** |
 
 ### Build, tests, docs, tooling
@@ -377,16 +377,25 @@ Read this section before editing. Every item below was an actual failure.
 
 16. **Windows has no usable CPU temperature, and the ACPI zone is not it.**
     `MSAcpi_ThermalZoneTemperature` is a *motherboard* sensor by ACPI's own
-    definition, and on many desktop boards it is a near-constant placeholder —
-    measured here at a fixed **27.9 °C through a full-core burn** (8 busy workers,
-    45 s, sampled every 3 s: `3010` tenths-Kelvin, unchanged). Publishing it as the
-    CPU temperature would produce a confident number that never moves, which is
-    worse than a dash. The only unprivileged source for real CPU temperature is a
-    running hardware monitor (LibreHardwareMonitor / OpenHardwareMonitor), whose
-    WMI `Sensor` class carries an identifier path (`/intelcpu/0/temperature/0`)
-    that names the hardware — so bucket by *identifier*, never by the localised,
-    user-editable display name. Without a monitor the CPU tile is a dash with
-    `temperature-cpu-unavailable`, and that is correct.
+    definition, and on many desktop boards it is a near-constant placeholder.
+    Measured twice on this machine (MSI B660M + i7-12700F, no hardware monitor
+    installed): a fixed `3010` tenths-Kelvin — **27.85 °C** — while ~105 s of CPU
+    time burned in a 15 s window across the burners, and unchanged after the load
+    stopped. Publishing that as the CPU temperature would be a confident number
+    that never moves, which is worse than a dash. Two cautions for anyone
+    re-measuring: the `Win32_PerfFormattedData_PerfOS_Processor` counter is not a
+    reliable saturation check while WMI itself competes for CPU (it read 24–35 %
+    during a genuinely loaded test), so compare `Get-Process … CPU` deltas against
+    wall time instead; and a burner spawned through `Start-Job` or with a bad
+    working directory can fail silently, which reads as "no load" and makes the
+    whole experiment worthless. The only unprivileged source for real CPU
+    temperature is a running hardware monitor (LibreHardwareMonitor /
+    OpenHardwareMonitor, installable via `winget install
+    LibreHardwareMonitor.LibreHardwareMonitor`), whose WMI `Sensor` class carries
+    an identifier path (`/intelcpu/0/temperature/0`) that names the hardware — so
+    bucket by *identifier*, never by the localised, user-editable display name.
+    Without a monitor the CPU tile is a dash with `temperature-cpu-unavailable`,
+    and that is correct.
 
 17. **Bucketing by display name has an ordering trap.** "GPU Core" contains
     "core", so a CPU rule tested first claims every graphics sensor in the
@@ -453,7 +462,7 @@ Read this section before editing. Every item below was an actual failure.
 | --- | --- |
 | **Community-list PR** | **Submitted — [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984)**, open and `mergeable_state: clean`. Both checks pass: `PR check` (shape, READMEs, awesome-lint, site build) and `Submission gate` ("All 1 submitted entry passes: `dsh.bundle` declared, repo old enough, enough commits"). Waiting on a maintainer's read, which the guide says is the actual decision. Notes: `gh` is not installed here, so the PR went through the API after `git clone --depth 1` of the fork — `contrib/submit-pr.sh` is still the one-command path wherever `gh` exists. Do **not** hand-add an `npm:` key to the entry; npm↔repo mapping is collected automatically and a hand-written key is rejected. The fork was synced first (`merge-upstream`), which matters because a stale fork re-adds old entries. |
 | **npm trusted publishing** | **Working as of v0.4.0** — the first release to actually exercise OIDC (earlier runs either failed earlier or short-circuited on "already on npm"). Two things had to be true: the npm trusted publisher configured (repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank) **and `Allow npm publish` ticked** under Allowed actions — the missing tick was the 403 (trap 21). 0.4.0 published with a provenance attestation, and its Release carries the version-free tarball. |
-| **npm trusted publishing** | **Working as of v0.4.0** — the first release to actually exercise OIDC (earlier runs either failed earlier or short-circuited on "already on npm"). Two things had to be true: the npm trusted publisher configured (repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank) **and `Allow npm publish` ticked** under Allowed actions — the missing tick was the 403 (trap 21). 0.4.0 published with a provenance attestation, and its Release carries the version-free tarball. |
+| **Local install for live verification** | The `web` profile currently points at this checkout (`dsh plugin --profile web add E:\Projects\dsh-client-ui-sidebar-perfmon` → a pnpm symlink), so a rebuild is picked up by a browser refresh with no reinstall. The market's npm build is backed up at `%TEMP%\perfmon-market-backup` (delete with `dsh plugin --profile web add @xmwengxing/dsh-client-ui-sidebar-perfmon` to go back). **The GUI on :3080 is a plain `dsh web` process, not pm2**, and an agent running inside it cannot restart it without killing its own session — verify on a throwaway `dsh --profile web --port 3099 --no-open` instance instead (redirect its stdout to a file to read the token URL). |
 | **macOS and Windows on real hardware** | **Windows temperature sources were exercised on real hardware in 0.4.0** (which is where traps 16–19 come from). The *metrics* readers for macOS and Windows remain untested by the author: covered by parser specs over captured tool output and by injected failure paths, never run on those systems. If a field is wrong there, the panel's `warnings` list names it. Lifting this is the single most valuable next step. |
 | **macOS temperature** | Implemented but **not run on a Mac** — `powermetrics` needs root and the two community helpers need installing, so the parser specs are all the coverage there is. A Mac user with `osx-cpu-temp` installed is the fastest way to confirm it. |
 | **pm2-managed web service** | The real GUI runs under pm2 as `deepseek-harness-webui`; host-half changes need a `pm2 restart` of it (schedule detached, see trap 5), never an inline restart during a turn. A throwaway `dsh --profile web --port 3099 --no-open` instance (via `setsid nohup … & disown`, so it survives the turn) is the way to verify the route without touching pm2. |

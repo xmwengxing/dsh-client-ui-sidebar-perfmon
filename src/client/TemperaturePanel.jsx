@@ -1,34 +1,39 @@
 /**
  * The temperature window: CPU, GPU, motherboard and drive temperatures.
  *
- * Four tiles, one per component, each with its headline reading, its label and a
- * supporting line. The card follows the same rules as the rest of the panel:
+ * Four tiles, one per component. Each tile is deliberately **two lines** — the
+ * reading with its unit, then the component's name — because that is all the
+ * card has to say at a glance. The supporting detail (which sensor answered, and
+ * the spread when a component has several) lives in the tile's tooltip, where it
+ * costs no height and is there for the reader who wants it. An earlier version
+ * printed it as a third line and the card read as mostly whitespace.
  *
- * - a component no source could answer is an em dash with its reason in the
- *   warnings list — never a zero, and never another component's figure;
+ * The card follows the same rules as the rest of the panel:
+ *
+ * - a component no source could answer is an em dash, and its tooltip says why —
+ *   never a zero, and never another component's figure;
  * - the *hottest* sensor is the headline for a component with several (a package
- *   and its cores, two drives), because that is the number worth watching, while
- *   the tooltip carries every sensor by name;
- * - the tiles are coloured by a fixed scale rather than by a design token that
- *   means something else, so a hot machine is legible at a glance.
+ *   and its cores, two drives), because that is the number worth watching;
+ * - the tiles are coloured on a fixed scale, so a hot machine is legible at a
+ *   glance.
  *
  * The card is drawn from the host's `temperature` reading, which the host
  * refreshes on its own calmer cadence: a temperature is an absolute reading, and
- * on Windows it costs a helper call. The card therefore shows the reading's own
- * age rather than pretending it moves with the two-second poll.
+ * on Windows it costs a helper call.
  *
  * @module dsh-client-ui-sidebar-perfmon/TemperaturePanel
  */
 
 import { createElement as h } from 'react'
-import { EMPTY, formatCelsius } from './format.js'
+import { formatCelsius } from './format.js'
+import { describeWarning } from './copy.js'
 
-/** The tiles, in render order, with the copy key and tone for each. */
+/** The tiles, in render order, with the copy key for each. */
 export const TEMPERATURE_TILES = [
-  { kind: 'cpu', key: 'temperatureCpu', tone: 'cpu' },
-  { kind: 'gpu', key: 'temperatureGpu', tone: 'gpu' },
-  { kind: 'mainboard', key: 'temperatureMainboard', tone: 'mainboard' },
-  { kind: 'disk', key: 'temperatureDisk', tone: 'disk' },
+  { kind: 'cpu', key: 'temperatureCpu' },
+  { kind: 'gpu', key: 'temperatureGpu' },
+  { kind: 'mainboard', key: 'temperatureMainboard' },
+  { kind: 'disk', key: 'temperatureDisk' },
 ]
 
 /**
@@ -55,25 +60,36 @@ export function temperatureTone(celsius) {
 }
 
 /**
- * The supporting line under one tile's reading.
+ * The tooltip for one tile.
  *
- * A component with several sensors reports its spread; one with a single sensor
- * names it, so a lone `TZ00_0` is not a mystery. A component with nothing to say
- * shows the dash rather than an empty line, which keeps the four tiles aligned.
+ * This is where the detail the tile no longer prints goes: every sensor by name
+ * with its reading, and — for a component nothing could answer — the reason,
+ * so an empty tile explains itself on hover instead of being a bare dash. The
+ * reason is taken from the reading's warnings, which is the only place the host
+ * records *why* a component is missing.
  * @param {object | null} group - the component's reading.
+ * @param {string[]} warnings - the reading's warning codes.
+ * @param {string} kind - the component key.
  * @param {(key: string, values?: object) => string} t - translator.
- * @returns {string} the detail text.
+ * @returns {string | undefined} the tooltip text, or undefined when there is nothing to say.
  */
-function tileDetail(group, t) {
-  if (group == null) return EMPTY
-  if (group.count > 1) {
-    return t('temperatureRange', {
-      min: formatCelsius(group.min),
-      max: formatCelsius(group.max),
-    })
+function tileTitle(group, warnings, kind, t) {
+  if (group == null) {
+    const code = warnings.find((entry) => entry === `temperature-${kind}-unavailable`)
+    return code === undefined ? undefined : describeWarning(t, code)
   }
-  const label = group.sensors?.[0]?.label
-  return typeof label === 'string' && label !== '' ? label : t('temperatureSensors', { count: String(group.count) })
+  const sensors = Array.isArray(group.sensors) ? group.sensors : []
+  const lines = sensors.map(
+    (sensor) => `${sensor.label}: ${formatCelsius(sensor.celsius)}${t('temperatureUnit')}`,
+  )
+  // A single sensor's own name is already the only line; a component with
+  // several also states its spread, which is what the third line used to show.
+  if (group.count > 1) {
+    lines.push(
+      t('temperatureRange', { min: formatCelsius(group.min), max: formatCelsius(group.max) }),
+    )
+  }
+  return lines.length > 0 ? lines.join('\n') : undefined
 }
 
 /**
@@ -86,6 +102,13 @@ export function TemperaturePanel({ reading, t }) {
   if (temperature == null) return null
   if (temperature.status === 'hidden') return null
   const groups = temperature.groups ?? {}
+  // The card's own warnings are the precise ones; the reading's are the fallback
+  // for a host that reports the reason at the top level instead.
+  const warnings = Array.isArray(temperature.warnings) && temperature.warnings.length > 0
+    ? temperature.warnings
+    : Array.isArray(reading?.warnings)
+      ? reading.warnings
+      : []
 
   return h(
     'section',
@@ -94,8 +117,8 @@ export function TemperaturePanel({ reading, t }) {
       'div',
       { className: 'dsh-perfmon-cardHead' },
       h('span', { className: 'dsh-perfmon-cardTitle' }, t('temperatures')),
-      // The source and the reading's age are what make a temperature trustworthy:
-      // the number moves on its own cadence, not on the panel's poll.
+      // The source is what makes a temperature trustworthy, and it is the one
+      // thing the tiles cannot show: it says where the numbers came from.
       h(
         'span',
         {
@@ -116,16 +139,13 @@ export function TemperaturePanel({ reading, t }) {
         const group = groups[tile.kind] ?? null
         const celsius = group?.celsius ?? null
         const tone = temperatureTone(celsius)
-        const sensors = Array.isArray(group?.sensors) ? group.sensors : []
-        // The tooltip is where every sensor by name lives, so a multi-core or
-        // multi-drive machine stays readable without widening the card.
-        const title =
-          sensors.length > 0
-            ? sensors.map((sensor) => `${sensor.label}: ${formatCelsius(sensor.celsius)}${t('temperatureUnit')}`).join('\n')
-            : undefined
         return h(
           'div',
-          { key: tile.kind, className: `dsh-perfmon-temp dsh-perfmon-temp--${tone}`, title },
+          {
+            key: tile.kind,
+            className: `dsh-perfmon-temp dsh-perfmon-temp--${tone}`,
+            title: tileTitle(group, warnings, tile.kind, t),
+          },
           h(
             'span',
             { className: 'dsh-perfmon-tempValue' },
@@ -133,7 +153,6 @@ export function TemperaturePanel({ reading, t }) {
             celsius === null ? null : h('span', { className: 'dsh-perfmon-tempUnit' }, t('temperatureUnit')),
           ),
           h('span', { className: 'dsh-perfmon-tempLabel' }, t(tile.key)),
-          h('span', { className: 'dsh-perfmon-tempDetail', title: title }, tileDetail(group, t)),
         )
       }),
     ),

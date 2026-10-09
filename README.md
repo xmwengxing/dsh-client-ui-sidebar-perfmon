@@ -16,12 +16,10 @@ English | [中文](README.zh-CN.md)
 │   ┌──────────────┐  ┌──────────────┐                     │
 │   │     58.0°C   │  │     47.0°C   │                     │
 │   │      CPU     │  │     显卡     │                     │
-│   │  coretemp…   │  │  amdgpu      │                     │
 │   └──────────────┘  └──────────────┘                     │
 │   ┌──────────────┐  ┌──────────────┐                     │
 │   │     35.0°C   │  │     40.0°C   │                     │
 │   │     主板     │  │     硬盘     │                     │
-│   │  最低 35 · … │  │  最低 38 · … │                     │
 │   └──────────────┘  └──────────────┘                     │
 ├─ 进程列表 ───────────────────── 共 349 个进程 · 显示 60 行 ┤
 │   CPU ↓        内存      进程名                           │
@@ -42,14 +40,13 @@ Session header:
   - **Resource usage**: ring gauges for CPU, memory and swap, each with its
     percentage, a supporting line (core count and load average, used-of-total,
     or the fact that the host has no swap), and a header naming the host.
-  - **Temperatures**: four tiles — CPU, GPU, motherboard and drives — each with
-    its reading in °C, its label, and one line of supporting detail (the sensor's
-    name, or the spread when a component has several). The tiles are coloured on a
-    cool / warm / hot scale (70 °C and 85 °C). A component with more than one
-    sensor reports its **hottest** reading as the headline and names every sensor
-    in the tooltip, so a multi-core package or a pair of drives stays readable
-    without widening the card. A component no source can answer is a `—` with its
-    reason listed below, never a zero. This card refreshes on its own calmer
+  - **Temperatures**: four tiles — CPU, GPU, motherboard and drives — each two
+    lines: the reading in °C, then the component's name. The tiles are coloured on
+    a cool / warm / hot scale (70 °C and 85 °C). Hovering a tile names every sensor
+    it covers and, when a component has several, states the spread; the headline
+    is the **hottest** sensor, so a multi-core package or a pair of drives stays
+    readable without widening the card. A component no source can answer is a `—`
+    whose tooltip says why, never a zero. This card refreshes on its own calmer
     cadence — see [Temperatures](#temperatures).
   - **Processes**: one row per process with CPU share, resident memory and its
     share of RAM, filtered by name or PID. The three tags are the table's column
@@ -159,8 +156,9 @@ One reader per platform family, each reading the platform's own source.
 | Project-directory size | in-process walk, all three platforms alike | same | same |
 
 Anything a platform cannot answer is reported as `null` and rendered as `—`, with
-the reason listed in the panel. Nothing is filled in with a zero, because a zero
-reads as a measurement.
+the reason available in the panel: a temperature tile's reason is in that tile's
+tooltip, and the reading's other warnings are in the footer timestamp's tooltip.
+Nothing is filled in with a zero, because a zero reads as a measurement.
 
 **Cost.** Linux reads `/proc` in-process and spawns nothing. macOS and Windows
 spawn one helper per sample, so their default refresh is calmer — 3s and 4s

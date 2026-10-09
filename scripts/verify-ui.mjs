@@ -172,11 +172,12 @@ const SNAPSHOT = `(() => {
     temps: Array.from(root.querySelectorAll('.dsh-perfmon-temp')).map((tile) => ({
       value: tile.querySelector('.dsh-perfmon-tempValue')?.textContent ?? null,
       label: tile.querySelector('.dsh-perfmon-tempLabel')?.textContent ?? null,
-      detail: tile.querySelector('.dsh-perfmon-tempDetail')?.textContent ?? null,
+      title: tile.getAttribute('title'),
       tone: (tile.className.match(/dsh-perfmon-temp--(\\w+)/) || [])[1] ?? null,
+      lines: tile.children.length,
     })),
     // The temperature card's own meta line, scoped to that card: an unscoped
-    // `.cardTitle + .cardMeta` picks up the resource card's header instead.
+    // title-plus-meta selector picks up the resource card's header instead.
     tempTitle: (() => {
       const card = Array.from(root.querySelectorAll('.dsh-perfmon-card')).find(
         (node) => node.querySelector('.dsh-perfmon-temps') !== null,

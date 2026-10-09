@@ -131,7 +131,7 @@ var ZH = {
     "project-dir-dropped": "\u6D3B\u8DC3\u5DE5\u4F5C\u533A\u76EE\u5F55\u8FC7\u591A\uFF0C\u4EC5\u7EDF\u8BA1\u5176\u4E2D\u4E00\u90E8\u5206",
     "temperature-hidden": "\u6E29\u5EA6\u5361\u7247\u5DF2\u5728\u914D\u7F6E\u4E2D\u5173\u95ED",
     "temperature-unavailable": "\u672C\u673A\u6CA1\u6709\u53EF\u8BFB\u53D6\u7684\u6E29\u5EA6\u4F20\u611F\u5668",
-    "temperature-cpu-unavailable": "CPU \u6E29\u5EA6\u4E0D\u53EF\u8BFB\u2014\u2014Windows \u9700\u5B89\u88C5\u5E76\u8FD0\u884C LibreHardwareMonitor \u7B49\u786C\u4EF6\u76D1\u63A7",
+    "temperature-cpu-unavailable": "CPU \u6E29\u5EA6\u4E0D\u53EF\u8BFB\u2014\u2014Windows \u4E0A\u9700\u8FD0\u884C\u786C\u4EF6\u76D1\u63A7\u8F6F\u4EF6\uFF08\u5982 LibreHardwareMonitor\uFF09\uFF0C\u9762\u677F\u4F1A\u81EA\u52A8\u8BC6\u522B",
     "temperature-gpu-unavailable": "\u663E\u5361\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
     "temperature-mainboard-unavailable": "\u4E3B\u677F\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
     "temperature-disk-unavailable": "\u786C\u76D8\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
@@ -236,7 +236,7 @@ var EN = {
     "project-dir-dropped": "More open workspaces than one scan covers; only some were measured",
     "temperature-hidden": "The temperature card is disabled in the configuration",
     "temperature-unavailable": "This host exposes no readable temperature sensor",
-    "temperature-cpu-unavailable": "CPU temperature is unreadable \u2014 on Windows this needs a hardware monitor such as LibreHardwareMonitor",
+    "temperature-cpu-unavailable": "CPU temperature is unreadable \u2014 on Windows this needs a hardware monitor such as LibreHardwareMonitor running, which the panel picks up automatically",
     "temperature-gpu-unavailable": "GPU temperature is unreadable",
     "temperature-mainboard-unavailable": "Motherboard temperature is unreadable",
     "temperature-disk-unavailable": "Drive temperature is unreadable",
@@ -828,21 +828,27 @@ var STYLES = `
 
 /* The temperature card sits under the resource card. Like it, it keeps the height
    its content needs: in a short pane the process list is what gives way, never
-   these four tiles. */
+   these four tiles. Two columns rather than four: a four-across row leaves each
+   tile about 90px in a normal Sidebar, which fits "27.9\xB0C" but not the English
+   labels ("Motherboard"), and a label that wraps or truncates is worse than the
+   extra row. */
 .dsh-perfmon-temps {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 10px 12px 12px;
+  gap: 5px;
+  padding: 8px 12px 10px;
   flex: 0 0 auto;
 }
 
+/* A tile is two lines: the reading, then the component. The detail the third
+   line used to carry lives in the tooltip \u2014 the card read as mostly whitespace
+   at three lines for what is two short strings. */
 .dsh-perfmon-temp {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 7px 6px 6px;
+  gap: 1px;
+  padding: 5px 6px;
   min-inline-size: 0;
   border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
   border-radius: var(--dsw-radius-sm, 6px);
@@ -868,17 +874,12 @@ var STYLES = `
 
 .dsh-perfmon-tempLabel {
   font-size: 11px;
+  line-height: 1.3;
   color: var(--dsw-alias-label-secondary, currentColor);
-}
-
-.dsh-perfmon-tempDetail {
-  font-size: 10px;
-  color: var(--dsw-alias-label-tertiary, currentColor);
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   max-inline-size: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Three tones, each a border and a value colour rather than a filled block: a
@@ -1524,10 +1525,10 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
 // src/client/TemperaturePanel.jsx
 var import_react3 = require("react");
 var TEMPERATURE_TILES = [
-  { kind: "cpu", key: "temperatureCpu", tone: "cpu" },
-  { kind: "gpu", key: "temperatureGpu", tone: "gpu" },
-  { kind: "mainboard", key: "temperatureMainboard", tone: "mainboard" },
-  { kind: "disk", key: "temperatureDisk", tone: "disk" }
+  { kind: "cpu", key: "temperatureCpu" },
+  { kind: "gpu", key: "temperatureGpu" },
+  { kind: "mainboard", key: "temperatureMainboard" },
+  { kind: "disk", key: "temperatureDisk" }
 ];
 var TEMPERATURE_TONES = { warm: 70, hot: 85 };
 function temperatureTone(celsius) {
@@ -1536,22 +1537,28 @@ function temperatureTone(celsius) {
   if (celsius >= TEMPERATURE_TONES.warm) return "warm";
   return "cool";
 }
-function tileDetail(group, t) {
-  if (group == null) return EMPTY;
-  if (group.count > 1) {
-    return t("temperatureRange", {
-      min: formatCelsius(group.min),
-      max: formatCelsius(group.max)
-    });
+function tileTitle(group, warnings, kind, t) {
+  if (group == null) {
+    const code = warnings.find((entry) => entry === `temperature-${kind}-unavailable`);
+    return code === void 0 ? void 0 : describeWarning(t, code);
   }
-  const label = group.sensors?.[0]?.label;
-  return typeof label === "string" && label !== "" ? label : t("temperatureSensors", { count: String(group.count) });
+  const sensors = Array.isArray(group.sensors) ? group.sensors : [];
+  const lines = sensors.map(
+    (sensor) => `${sensor.label}: ${formatCelsius(sensor.celsius)}${t("temperatureUnit")}`
+  );
+  if (group.count > 1) {
+    lines.push(
+      t("temperatureRange", { min: formatCelsius(group.min), max: formatCelsius(group.max) })
+    );
+  }
+  return lines.length > 0 ? lines.join("\n") : void 0;
 }
 function TemperaturePanel({ reading, t }) {
   const temperature = reading?.temperature;
   if (temperature == null) return null;
   if (temperature.status === "hidden") return null;
   const groups = temperature.groups ?? {};
+  const warnings = Array.isArray(temperature.warnings) && temperature.warnings.length > 0 ? temperature.warnings : Array.isArray(reading?.warnings) ? reading.warnings : [];
   return (0, import_react3.createElement)(
     "section",
     { className: "dsh-perfmon-card", "aria-label": t("temperatures") },
@@ -1559,8 +1566,8 @@ function TemperaturePanel({ reading, t }) {
       "div",
       { className: "dsh-perfmon-cardHead" },
       (0, import_react3.createElement)("span", { className: "dsh-perfmon-cardTitle" }, t("temperatures")),
-      // The source and the reading's age are what make a temperature trustworthy:
-      // the number moves on its own cadence, not on the panel's poll.
+      // The source is what makes a temperature trustworthy, and it is the one
+      // thing the tiles cannot show: it says where the numbers came from.
       (0, import_react3.createElement)(
         "span",
         {
@@ -1577,19 +1584,20 @@ function TemperaturePanel({ reading, t }) {
         const group = groups[tile.kind] ?? null;
         const celsius = group?.celsius ?? null;
         const tone = temperatureTone(celsius);
-        const sensors = Array.isArray(group?.sensors) ? group.sensors : [];
-        const title = sensors.length > 0 ? sensors.map((sensor) => `${sensor.label}: ${formatCelsius(sensor.celsius)}${t("temperatureUnit")}`).join("\n") : void 0;
         return (0, import_react3.createElement)(
           "div",
-          { key: tile.kind, className: `dsh-perfmon-temp dsh-perfmon-temp--${tone}`, title },
+          {
+            key: tile.kind,
+            className: `dsh-perfmon-temp dsh-perfmon-temp--${tone}`,
+            title: tileTitle(group, warnings, tile.kind, t)
+          },
           (0, import_react3.createElement)(
             "span",
             { className: "dsh-perfmon-tempValue" },
             formatCelsius(celsius),
             celsius === null ? null : (0, import_react3.createElement)("span", { className: "dsh-perfmon-tempUnit" }, t("temperatureUnit"))
           ),
-          (0, import_react3.createElement)("span", { className: "dsh-perfmon-tempLabel" }, t(tile.key)),
-          (0, import_react3.createElement)("span", { className: "dsh-perfmon-tempDetail", title }, tileDetail(group, t))
+          (0, import_react3.createElement)("span", { className: "dsh-perfmon-tempLabel" }, t(tile.key))
         );
       })
     )
@@ -1709,6 +1717,7 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
   }, []);
   const { reading, status, error, intervalMs } = state;
   const failed = status === "error";
+  const warningText = Array.isArray(reading?.warnings) ? reading.warnings.map((code) => describeWarning(t, String(code))).join("\n") : "";
   return (0, import_react4.createElement)(
     "div",
     { className: "dsh-perfmon-root" },
@@ -1736,27 +1745,22 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
     // The temperature card, directly under the resource card. It renders from the
     // same reading but refreshes on the host's own calmer cadence, so the numbers
     // here can be older than the gauges above — which the card says by naming its
-    // source and its own reading time.
+    // source.
     reading === void 0 ? null : (0, import_react4.createElement)(TemperaturePanel, { reading, t }),
-    // A platform that cannot answer a field says so here rather than leaving the
-    // panel silently short of a number.
-    Array.isArray(reading?.warnings) && reading.warnings.length > 0 ? (0, import_react4.createElement)(
-      "div",
-      { className: "dsh-perfmon-notice dsh-perfmon-notice--muted" },
-      (0, import_react4.createElement)("div", null, t("warnings")),
-      (0, import_react4.createElement)(
-        "ul",
-        { className: "dsh-perfmon-warningList" },
-        reading.warnings.map(
-          (code) => (0, import_react4.createElement)("li", { key: code }, describeWarning(t, String(code)))
-        )
-      )
-    ) : null,
     reading === void 0 ? null : (0, import_react4.createElement)(ProcessPanel, { reading, sort, onSortChange: setSort, t }),
     (0, import_react4.createElement)(
       "div",
       { className: "dsh-perfmon-foot" },
-      (0, import_react4.createElement)("span", null, t("updatedAt", { time: formatClock(reading?.window?.at) })),
+      // The warnings used to be a card of their own, which cost a lot of height
+      // for a list that is empty on a healthy host. They are still the only
+      // place a global reason lives ("PowerShell is missing", which is why every
+      // figure above is a dash), so they ride the footer as a tooltip: nothing
+      // is lost, and a healthy panel shows no trace of them.
+      (0, import_react4.createElement)(
+        "span",
+        { title: warningText === "" ? void 0 : warningText },
+        t("updatedAt", { time: formatClock(reading?.window?.at) })
+      ),
       (0, import_react4.createElement)("span", null, t("autoRefresh", { seconds: Math.round(intervalMs / 1e3) })),
       status === "stale" && error !== void 0 ? (0, import_react4.createElement)("span", null, `${t("errorTitle")}: ${error}`) : null,
       (0, import_react4.createElement)(

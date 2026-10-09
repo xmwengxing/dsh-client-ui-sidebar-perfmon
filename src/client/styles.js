@@ -565,21 +565,27 @@ export const STYLES = `
 
 /* The temperature card sits under the resource card. Like it, it keeps the height
    its content needs: in a short pane the process list is what gives way, never
-   these four tiles. */
+   these four tiles. Two columns rather than four: a four-across row leaves each
+   tile about 90px in a normal Sidebar, which fits "27.9°C" but not the English
+   labels ("Motherboard"), and a label that wraps or truncates is worse than the
+   extra row. */
 .dsh-perfmon-temps {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 10px 12px 12px;
+  gap: 5px;
+  padding: 8px 12px 10px;
   flex: 0 0 auto;
 }
 
+/* A tile is two lines: the reading, then the component. The detail the third
+   line used to carry lives in the tooltip — the card read as mostly whitespace
+   at three lines for what is two short strings. */
 .dsh-perfmon-temp {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 7px 6px 6px;
+  gap: 1px;
+  padding: 5px 6px;
   min-inline-size: 0;
   border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
   border-radius: var(--dsw-radius-sm, 6px);
@@ -605,17 +611,12 @@ export const STYLES = `
 
 .dsh-perfmon-tempLabel {
   font-size: 11px;
+  line-height: 1.3;
   color: var(--dsw-alias-label-secondary, currentColor);
-}
-
-.dsh-perfmon-tempDetail {
-  font-size: 10px;
-  color: var(--dsw-alias-label-tertiary, currentColor);
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   max-inline-size: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Three tones, each a border and a value colour rather than a filled block: a

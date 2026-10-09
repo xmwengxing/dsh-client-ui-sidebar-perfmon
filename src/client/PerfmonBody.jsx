@@ -179,6 +179,12 @@ export function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
 
   const { reading, status, error, intervalMs } = state
   const failed = status === 'error'
+  // The reading's warnings, translated, as one line for the footer's tooltip.
+  // A host that could not read something says so here; a healthy one says
+  // nothing and the tooltip is not attached at all.
+  const warningText = Array.isArray(reading?.warnings)
+    ? reading.warnings.map((code) => describeWarning(t, String(code))).join('\n')
+    : ''
 
   return h(
     'div',
@@ -213,29 +219,22 @@ export function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
     // The temperature card, directly under the resource card. It renders from the
     // same reading but refreshes on the host's own calmer cadence, so the numbers
     // here can be older than the gauges above — which the card says by naming its
-    // source and its own reading time.
+    // source.
     reading === undefined ? null : h(TemperaturePanel, { reading, t }),
-    // A platform that cannot answer a field says so here rather than leaving the
-    // panel silently short of a number.
-    Array.isArray(reading?.warnings) && reading.warnings.length > 0
-      ? h(
-          'div',
-          { className: 'dsh-perfmon-notice dsh-perfmon-notice--muted' },
-          h('div', null, t('warnings')),
-          h(
-            'ul',
-            { className: 'dsh-perfmon-warningList' },
-            reading.warnings.map((code) =>
-              h('li', { key: code }, describeWarning(t, String(code))),
-            ),
-          ),
-        )
-      : null,
     reading === undefined ? null : h(ProcessPanel, { reading, sort, onSortChange: setSort, t }),
     h(
       'div',
       { className: 'dsh-perfmon-foot' },
-      h('span', null, t('updatedAt', { time: formatClock(reading?.window?.at) })),
+      // The warnings used to be a card of their own, which cost a lot of height
+      // for a list that is empty on a healthy host. They are still the only
+      // place a global reason lives ("PowerShell is missing", which is why every
+      // figure above is a dash), so they ride the footer as a tooltip: nothing
+      // is lost, and a healthy panel shows no trace of them.
+      h(
+        'span',
+        { title: warningText === '' ? undefined : warningText },
+        t('updatedAt', { time: formatClock(reading?.window?.at) }),
+      ),
       h('span', null, t('autoRefresh', { seconds: Math.round(intervalMs / 1000) })),
       status === 'stale' && error !== undefined ? h('span', null, `${t('errorTitle')}: ${error}`) : null,
       h(

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.1
+
+- **The temperature tiles are two lines, not three.** The third line carried a
+  sensor name or a spread that fits far better in the tooltip, and at three lines
+  the card read as mostly whitespace. Each tile is now its reading and its
+  component name; hovering names every sensor and states the spread.
+- **The "some metrics are unavailable" card is gone.** It cost a block of height
+  on every host for a list that is empty on a healthy one. The reasons survive
+  where the reader is actually looking: a temperature tile's tooltip says why
+  that tile is empty, and the footer carries the reading's other warnings as a
+  tooltip, so "PowerShell is missing" is still discoverable.
+- **CPU temperature guidance is now actionable.** On a Windows desktop with no
+  hardware monitor there is genuinely no unprivileged source for it (measured
+  again on a 12-core i7-12700F: the ACPI thermal zone held 27.85 °C through
+  ~105 s of CPU time burned in 15 s, so it is a board-level placeholder and is
+  correctly never published as the CPU). The tile's tooltip now says to run a
+  hardware monitor and that the panel picks it up automatically.
+
 ## 0.4.0
 
 - **A temperature card, directly under the resource card.** Four tiles — CPU, GPU,

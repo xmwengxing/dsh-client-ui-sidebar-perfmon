@@ -674,15 +674,18 @@ test('a platform that cannot answer a field shows a dash, never a zero', async (
   assert.equal(details[1], '—', 'unreadable memory is one dash, not "0 B / 0 B"')
   assert.equal(details[2], '—', 'unreadable swap is unknown, not "not enabled"')
 
-  // The platform is named in the header, and the warnings are listed, translated.
+  // The platform is named in the header.
   const meta = textsOf(renderer, 'dsh-perfmon-cardMeta')[0]
   assert.match(meta, /Windows/)
-  const warningItems = renderer.root.findAll(
-    (node) => node.type === 'li' && typeof node.children[0] === 'string',
-  )
-  const warningText = warningItems.map((node) => node.children.join(''))
-  assert.ok(warningText.some((line) => line.includes('PowerShell')))
-  assert.ok(warningText.some((line) => line.includes('交换')))
+  // The warnings are no longer a card of their own — they ride the footer's
+  // tooltip, so the explanation is still reachable without costing a block of
+  // height on every healthy host.
+  const foot = renderer.root.find((node) => String(node.props.className ?? '') === 'dsh-perfmon-foot')
+  const updated = foot.findAll((node) => typeof node.props.title === 'string')
+  assert.equal(updated.length, 1, 'the footer carries the warnings as a tooltip')
+  assert.match(updated[0].props.title, /PowerShell/)
+  assert.match(updated[0].props.title, /交换/)
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-notice--muted'), [], 'and no notice card is rendered')
 
   // And the process table says it has nothing rather than looking merely empty.
   assert.deepEqual(textsOf(renderer, 'dsh-perfmon-empty'), ['没有读到进程信息'])
@@ -847,9 +850,25 @@ test('the temperature card shows one tile each for CPU, GPU, board and drives', 
   // The unavailable CPU tile is a dash, and the answered ones carry their reading
   // with the unit beside it.
   assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempValue'), ['—', '53.0°C', '27.9°C', '40.0°C'])
+  // Two lines per tile, and no third: the detail that used to be printed there
+  // is in the tooltip now, so a tile is exactly a value and a label.
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempDetail'), [])
+  const tiles = renderer.root.findAll((node) =>
+    String(node.props.className ?? '').includes('dsh-perfmon-temp '),
+  )
+  for (const tile of tiles) {
+    // Direct children are the lines; the unit is a span *inside* the value, so
+    // it must not be counted as a line of its own.
+    const lines = tile.children.filter((child) => typeof child !== 'string')
+    assert.equal(lines.length, 2, 'a tile renders the reading and the label, nothing else')
+    assert.deepEqual(
+      lines.map((line) => line.props.className),
+      ['dsh-perfmon-tempValue', 'dsh-perfmon-tempLabel'],
+    )
+  }
 })
 
-test('a tile with several sensors reports its spread and names them in the tooltip', async (context) => {
+test('the tile tooltip carries every sensor and the spread, which the tile no longer prints', async (context) => {
   const renderer = await mount(
     context,
     React.createElement(TemperaturePanel, { reading: { temperature: temperatureFixture() }, t }),
@@ -858,14 +877,26 @@ test('a tile with several sensors reports its spread and names them in the toolt
     String(node.props.className ?? '').includes('dsh-perfmon-temp '),
   )
   assert.equal(tiles.length, 4)
-  // The drive tile has two sensors, so its detail is the range rather than a name.
-  const diskDetail = textsOf(renderer, 'dsh-perfmon-tempDetail')[3]
-  assert.match(diskDetail, /最低 38\.0 · 最高 40\.0/)
-  // The tooltip is where every drive is named.
+  // The drive tile has two sensors: both are named, and the spread is stated.
   assert.match(tiles[3].props.title, /ST2000DM005: 38\.0°C/)
   assert.match(tiles[3].props.title, /SSD 512GB: 40\.0°C/)
-  // A single-sensor tile names that sensor instead of inventing a range.
-  assert.equal(textsOf(renderer, 'dsh-perfmon-tempDetail')[1], 'NVIDIA GeForce GTX 1080 Ti')
+  assert.match(tiles[3].props.title, /最低 38\.0 · 最高 40\.0/)
+  // A single-sensor tile names that sensor.
+  assert.equal(tiles[1].props.title, 'NVIDIA GeForce GTX 1080 Ti: 53.0°C')
+})
+
+test('an unanswerable tile explains itself in its tooltip instead of a bare dash', async (context) => {
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: temperatureFixture() }, t }),
+  )
+  const tiles = renderer.root.findAll((node) =>
+    String(node.props.className ?? '').includes('dsh-perfmon-temp '),
+  )
+  // The CPU tile has no reading; its tooltip says why, which is where the
+  // removed warnings notice used to carry that information.
+  assert.equal(tiles[0].children[0].children.join(''), '—')
+  assert.match(tiles[0].props.title, /CPU 温度不可读/)
 })
 
 test('a temperature reading the host could not make shows four dashes, never zeroes', async (context) => {
@@ -879,7 +910,7 @@ test('a temperature reading the host could not make shows four dashes, never zer
     React.createElement(TemperaturePanel, { reading: { temperature: unavailable }, t }),
   )
   assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempValue'), ['—', '—', '—', '—'])
-  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempDetail'), ['—', '—', '—', '—'])
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempDetail'), [])
   assert.match(textsOf(renderer, 'dsh-perfmon-cardMeta')[0], /不可用/)
 })
 
@@ -943,7 +974,7 @@ test('the temperature card sits directly under the resource card', async (contex
   assert.deepEqual(titles, ['资源占用', '温度', '进程列表'])
 })
 
-test('the panel explains an unreadable temperature rather than showing a bare dash', async (context) => {
+test('the panel explains an unreadable temperature in the tile, not in a notice card', async (context) => {
   const renderer = await mount(
     context,
     React.createElement(PerfmonBody, {
@@ -959,13 +990,15 @@ test('the panel explains an unreadable temperature rather than showing a bare da
     }),
   )
   await TestRenderer.act(async () => {})
-  const warningItems = renderer.root
-    .findAll((node) => node.type === 'li' && typeof node.children[0] === 'string')
-    .map((node) => node.children.join(''))
-  assert.ok(
-    warningItems.some((line) => line.includes('CPU 温度不可读')),
-    'the panel must say why the CPU tile is empty',
+  // The reason lives on the CPU tile itself, which is where the reader is
+  // looking when they wonder why it is empty.
+  const tiles = renderer.root.findAll((node) =>
+    String(node.props.className ?? '').includes('dsh-perfmon-temp '),
   )
+  assert.match(tiles[0].props.title, /CPU 温度不可读/)
+  // And nothing renders the old warnings card any more.
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-notice--muted'), [])
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-warningList'), [])
 })
 
 test('a Celsius reading is formatted to the tenth, and a missing one is a dash', () => {
