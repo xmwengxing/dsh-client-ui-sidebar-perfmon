@@ -81,6 +81,26 @@ export const TEMPERATURE_SCRIPT = [
 export const TEMPERATURE_KINDS = ['cpu', 'gpu', 'mainboard', 'disk']
 
 /**
+ * Whether a hardware monitor's sensor is a temperature *reading* rather than a
+ * derived figure that merely shares the `Temperature` sensor type.
+ *
+ * This exists for one sensor family, and it is a real bug when missed. Intel
+ * CPUs report `CPU Core #N Distance to TjMax`, which LibreHardwareMonitor types
+ * as a temperature but which is **thermal headroom**: `TjMax - actual`, so 41 °C
+ * of core with a 100 °C TjMax reports 59. Measured on an i7-12700F: the headroom
+ * sensors ran 48–59 while the cores themselves ran 41–52. Because the tile takes
+ * the *hottest* sensor as its headline, counting headroom inverted the reading —
+ * it displayed the coolest core's headroom as the CPU temperature, and a machine
+ * working harder would have shown a *lower* number.
+ * @param {string} name - the sensor's display name.
+ * @returns {boolean} true when the sensor is a temperature to display.
+ */
+export function isTemperatureReading(name) {
+  const text = String(name ?? '').toLowerCase()
+  return !text.includes('distance to tjmax') && !text.includes('distance to tj max')
+}
+
+/**
  * Place a hardware monitor's sensor in a bucket, from its identifier.
  *
  * LibreHardwareMonitor identifiers are slash-delimited paths whose first segment
@@ -165,6 +185,9 @@ export function parseTemperatureSample(text) {
   for (const entry of list(payload.monitors)) {
     const celsius = finite(entry?.celsius)
     if (celsius === null) continue
+    // Headroom is not a temperature: counting it would invert the headline (see
+    // isTemperatureReading).
+    if (!isTemperatureReading(entry?.name)) continue
     const kind = classifyMonitorSensor(entry?.identifier, entry?.name)
     const label = String(entry?.name ?? '').trim()
     sensors.push({

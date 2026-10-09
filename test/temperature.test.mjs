@@ -28,6 +28,7 @@ import {
   celsiusFromTenthsKelvin,
   classifyMonitorSensor,
   createWin32Temperature,
+  isTemperatureReading,
   parseTemperatureSample,
   TEMPERATURE_SCRIPT,
 } from '../src/host/temperature/win32.js'
@@ -191,6 +192,42 @@ test('the ACPI zone is never published as the CPU temperature', () => {
   assert.equal(zone.label, 'TZ00_0', 'the WMI instance name is reduced to its last segment')
   assert.equal(parsed.source, 'windows-cim')
   assert.ok(parsed.warnings.includes('temperature-unavailable') === false, 'four sensors answered')
+})
+
+test('Intel thermal headroom is not counted as a CPU temperature', () => {
+  // Measured on an i7-12700F with LibreHardwareMonitor running: the cores read
+  // 41-52 C while the "Distance to TjMax" sensors read 48-59, because headroom is
+  // `TjMax - actual` (41 + 59 = 100). Since a tile's headline is its *hottest*
+  // sensor, counting headroom displayed the coolest core's headroom as the CPU
+  // temperature — and a harder-working machine would have shown a lower number.
+  const payload = JSON.stringify({
+    monitors: [
+      { identifier: '/intelcpu/0/temperature/0', name: 'Core Max', celsius: 52 },
+      { identifier: '/intelcpu/0/temperature/1', name: 'Core Average', celsius: 45.3 },
+      { identifier: '/intelcpu/0/temperature/2', name: 'CPU Core #1', celsius: 41 },
+      { identifier: '/intelcpu/0/temperature/14', name: 'CPU Package', celsius: 50 },
+      { identifier: '/intelcpu/0/temperature/15', name: 'CPU Core #1 Distance to TjMax', celsius: 59 },
+      { identifier: '/intelcpu/0/temperature/19', name: 'CPU Core #5 Distance to TjMax', celsius: 50 },
+    ],
+    monitorSource: 'root/LibreHardwareMonitor',
+    zones: [],
+    disks: [],
+    gpus: [],
+  })
+  const parsed = parseTemperatureSample(payload)
+  const cpu = parsed.sensors.filter((sensor) => sensor.kind === 'cpu')
+  assert.equal(cpu.length, 4, 'the two headroom sensors are not temperatures')
+  assert.equal(
+    cpu.some((sensor) => /distance to tjmax/i.test(sensor.label)),
+    false,
+    'no headroom sensor may reach the tile',
+  )
+  assert.equal(Math.max(...cpu.map((sensor) => sensor.celsius)), 52, 'the headline is the hottest real core')
+  assert.equal(isTemperatureReading('CPU Core #1'), true)
+  assert.equal(isTemperatureReading('CPU Core #1 Distance to TjMax'), false)
+  assert.equal(isTemperatureReading('CPU Core #1 Distance to TJ Max'), false)
+  assert.equal(isTemperatureReading('GPU Core'), true)
+  assert.equal(isTemperatureReading(undefined), true, 'a sensor with no name is not excluded')
 })
 
 test('a running hardware monitor answers the CPU, and the ACPI zone still only the board', () => {
