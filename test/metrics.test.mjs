@@ -9,6 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { resolve as resolvePath } from 'node:path'
 // A same-package spec reads the internals directly; the published host face
 // exports only the plugin's own `apply`/`inject`/`name`.
 import { derive, hostFacts, sortProcesses, createSampler } from '../src/host/metrics.js'
@@ -258,7 +259,9 @@ test('the project-folder options resolve defensively like the rest', () => {
     { dir: resolveConfig({ projectDir: false }, 'linux').projectDir, hidden: resolveConfig({ projectDir: false }, 'linux').projectDirHidden },
     { dir: null, hidden: true },
   )
-  assert.equal(resolveConfig({ projectDir: '/elsewhere' }, 'linux').projectDir, '/elsewhere')
+  // `projectDir` is resolved, not echoed — `/elsewhere` becomes `E:\elsewhere`
+  // on Windows — so the expectation goes through the same resolver.
+  assert.equal(resolveConfig({ projectDir: '/elsewhere' }, 'linux').projectDir, resolvePath('/elsewhere'))
   assert.equal(resolveConfig({ projectDir: '/elsewhere' }, 'linux').projectDirHidden, false)
 })
 

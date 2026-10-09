@@ -15,22 +15,53 @@ import { resolve as resolvePath } from 'node:path'
 import { createScanController, DU_WARNINGS, resolveProjectDir } from '../src/host/du.js'
 
 /**
+ * The path the controller will resolve a spec's POSIX-style literal to.
+ *
+ * The controller runs every folder through `path.resolve`, which on Windows
+ * turns `/p` into `E:\p`. A spec that compared the raw literal therefore passed
+ * on Linux and failed on Windows — which is exactly what these specs used to do.
+ * Expectations go through `at`, and comparisons go through `same`, so one spec
+ * serves both platforms.
+ * @param {string} path - a POSIX-style literal.
+ * @returns {string} the resolved path.
+ */
+const at = (path) => resolvePath(path)
+
+/**
+ * Normalize a path for comparison, so `E:\p` and `E:/p` name the same folder.
+ * @param {unknown} value - the path to normalize.
+ * @returns {string} the path with forward slashes.
+ */
+const same = (value) => String(value).replace(/\\/g, '/')
+
+/**
+ * The scanned folders of a controller state, normalized, in order.
+ * @param {object} state - a `scanner.state()` result.
+ * @returns {string[]} the folder paths.
+ */
+const scannedDirs = (state) => state.disk.projectDirs.map((entry) => same(entry.dir))
+
+/**
  * Build an injected filesystem from a nested literal.
  *
  * `{ 'a.txt': 10, 'sub/b.bin': 5 }` becomes a tree of two folders and two
  * regular files; every fs call counts its invocations and can be made slow, so
  * the stop-mid-walk paths are exercised rather than lucky.
+ *
+ * Every path is resolved through `resolvePath` and compared with forward slashes,
+ * so the stub answers the same whether the host separates with `/` or `\`.
  * @param {Record<string, number>} files - byte size per file path.
  * @param {{ broken?: string[], symlinks?: string[], lstatDelay?: () => Promise<void> }} [options] - faults to inject.
  * @returns {{readdir: Function, lstat: Function, calls: {readdir: number, lstat: number}}} the stub and its call counters.
  */
 function stubFs(files, options = {}) {
-  const broken = new Set(options.broken ?? [])
-  const symlinks = new Set(options.symlinks ?? [])
+  // Faults are given as POSIX literals and matched against resolved paths.
+  const broken = new Set((options.broken ?? []).map((path) => same(at(path))))
+  const symlinks = new Set((options.symlinks ?? []).map((path) => same(at(path))))
   const calls = { readdir: 0, lstat: 0 }
 
   // Every key is stored under the root the specs mount the scanner at.
-  const ROOT = '/p'
+  const ROOT = same(at('/p'))
   const folders = new Set([ROOT])
   const fileMap = new Map()
   for (const [path, size] of Object.entries(files)) {
@@ -49,7 +80,7 @@ function stubFs(files, options = {}) {
     calls,
     readdir: async (dir) => {
       calls.readdir += 1
-      const clean = String(dir).replace(/\\/g, '/')
+      const clean = same(dir)
       if (broken.has(clean) || broken.has(clean.split('/').pop() ?? '')) throw new Error('EACCES')
       const prefix = clean.endsWith('/') ? clean : `${clean}/`
       const names = new Set()
@@ -70,7 +101,7 @@ function stubFs(files, options = {}) {
     lstat: async (path) => {
       calls.lstat += 1
       if (options.lstatDelay !== undefined) await options.lstatDelay()
-      const clean = String(path).replace(/\\/g, '/')
+      const clean = same(path)
       if (broken.has(clean)) throw new Error('EPERM')
       const size = fileMap.get(clean)
       if (size === undefined) throw new Error('ENOENT')
@@ -102,7 +133,7 @@ test('a started scan covers the open sessions folders once each', async () => {
   assert.equal(state.status, 'done')
   assert.equal(state.disk.projectBytes, 12, '5 + 7 with /p/sub deduplicated')
   assert.equal(state.disk.projectEntries, 2)
-  assert.deepEqual(state.disk.projectDirs.map((entry) => entry.dir), ['/p/sub', '/p/other'])
+  assert.deepEqual(scannedDirs(state), [same(at('/p/sub')), same(at('/p/other'))])
   assert.deepEqual(state.disk.warnings, [])
 })
 
@@ -165,7 +196,7 @@ test('a named folder is measured even when no session is open', async () => {
   const done = scanner.state()
   assert.equal(done.status, 'done')
   assert.equal(done.disk.projectBytes, 15)
-  assert.deepEqual(done.disk.projectDirs.map((entry) => entry.dir), ['/p'])
+  assert.deepEqual(scannedDirs(done), [same(at('/p'))])
   assert.equal(done.disk.warnings.includes(DU_WARNINGS.noRoot), false)
 })
 
@@ -179,15 +210,15 @@ test('a named folder wins over the open-session derivation, and the config pin w
   scanner.start('/p')
   await new Promise((resolve) => setTimeout(resolve, 10))
   assert.deepEqual(
-    scanner.state().disk.projectDirs.map((entry) => entry.dir),
-    ['/p/pinned'],
+    scannedDirs(scanner.state()),
+    [same(at('/p/pinned'))],
     'the config pin overrides everything',
   )
 
   const noPin = createScanController({ openCwds: () => ['/p/other'], fsImpl: fs })
   noPin.start('/p')
   await new Promise((resolve) => setTimeout(resolve, 10))
-  assert.deepEqual(noPin.state().disk.projectDirs.map((entry) => entry.dir), ['/p'])
+  assert.deepEqual(scannedDirs(noPin.state()), [same(at('/p'))])
 })
 
 test('a named-folder reading survives a later folder-set change', async () => {
@@ -202,7 +233,7 @@ test('a named-folder reading survives a later folder-set change', async () => {
   await new Promise((resolve) => setTimeout(resolve, 10))
   const state = scanner.state()
   assert.equal(state.status, 'done')
-  assert.deepEqual(state.disk.projectDirs.map((entry) => entry.dir), ['/p'])
+  assert.deepEqual(scannedDirs(state), [same(at('/p'))])
   assert.equal(state.disk.projectBytes, 3)
 })
 
@@ -306,7 +337,7 @@ test('folders no longer open drop out of the finished reading', async () => {
   scanner.start()
   await new Promise((resolve) => setTimeout(resolve, 10))
   const state = scanner.state()
-  assert.deepEqual(state.disk.projectDirs.map((entry) => entry.dir), ['/p'])
+  assert.deepEqual(scannedDirs(state), [same(at('/p'))])
   assert.equal(state.disk.projectBytes, 3, 'the /p walk covers sub/ too — it is inside the folder')
 })
 
@@ -348,6 +379,8 @@ test('resolveProjectDir pins a folder or yields to workspace mode', () => {
   assert.equal(resolveProjectDir(true), null, 'true means workspace mode')
   assert.equal(resolveProjectDir(false), null)
   assert.equal(resolveProjectDir(''), null)
-  assert.equal(resolveProjectDir('/explicit'), '/explicit')
+  // The pin is resolved, not echoed: `/explicit` is `E:\explicit` on Windows, so
+  // the expectation has to go through the same resolver the function uses.
+  assert.equal(resolveProjectDir('/explicit'), at('/explicit'))
   assert.equal(resolveProjectDir('rel/../rel'), resolvePath('rel/../rel'), 'relative paths resolve against the process cwd')
 })
