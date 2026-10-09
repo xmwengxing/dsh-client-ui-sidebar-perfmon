@@ -563,6 +563,88 @@ export const STYLES = `
   color: var(--dsw-alias-label-tertiary, currentColor);
 }
 
+/* The temperature card sits under the resource card. Like it, it keeps the height
+   its content needs: in a short pane the process list is what gives way, never
+   these four tiles. */
+.dsh-perfmon-temps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 10px 12px 12px;
+  flex: 0 0 auto;
+}
+
+.dsh-perfmon-temp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 6px 6px;
+  min-inline-size: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, rgba(127, 127, 127, 0.06));
+  /* The tile is a fixed control: without this a tight card squeezes it and the
+     reading collides with the label. */
+  flex: none;
+}
+
+.dsh-perfmon-tempValue {
+  font: var(--dsw-font-sm-strong-13, 600 13px/1.2 var(--dsw-font-family, system-ui));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary, currentColor);
+}
+
+.dsh-perfmon-tempUnit {
+  margin-inline-start: 1px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary, currentColor);
+}
+
+.dsh-perfmon-tempLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary, currentColor);
+}
+
+.dsh-perfmon-tempDetail {
+  font-size: 10px;
+  color: var(--dsw-alias-label-tertiary, currentColor);
+  font-variant-numeric: tabular-nums;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Three tones, each a border and a value colour rather than a filled block: a
+   filled tile at four across would shout, and the reading has to stay the thing
+   the eye lands on. The unknown tone is the plain card border. */
+.dsh-perfmon-temp--cool {
+  border-color: var(--dsw-alias-state-success-secondary, rgba(80, 170, 120, 0.4));
+}
+
+.dsh-perfmon-temp--cool .dsh-perfmon-tempValue {
+  color: var(--dsw-alias-state-success-primary, currentColor);
+}
+
+.dsh-perfmon-temp--warm {
+  border-color: var(--dsw-alias-state-warn-secondary, rgba(217, 154, 43, 0.5));
+}
+
+.dsh-perfmon-temp--warm .dsh-perfmon-tempValue {
+  color: var(--dsw-alias-state-warn-primary, currentColor);
+}
+
+.dsh-perfmon-temp--hot {
+  border-color: var(--dsw-alias-state-error-secondary, rgba(200, 80, 80, 0.5));
+}
+
+.dsh-perfmon-temp--hot .dsh-perfmon-tempValue {
+  color: var(--dsw-alias-state-error-primary, currentColor);
+}
+
 .dsh-perfmon-headerButton {
   display: inline-flex;
   align-items: center;

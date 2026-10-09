@@ -28,6 +28,7 @@
 import { createScanController, DU_WARNINGS, resolveProjectDir } from './du.js'
 import { createSampler } from './metrics.js'
 import { selectReader } from './readers/index.js'
+import { createTemperatureProbe, HIDDEN_TEMPERATURE } from './temperature/index.js'
 
 /** Stable Cordis plugin name. */
 export const name = 'dsh-perfmon'
@@ -60,6 +61,15 @@ const DEFAULTS = {
   projectDirEntryBudget: 50_000,
   /** Distinct folders one scan may cover; the rest are counted, not walked. */
   projectDirMaxDirs: 12,
+  /**
+   * How long one temperature reading is reused.
+   *
+   * Much calmer than the metrics poll on purpose: a temperature is an absolute
+   * reading rather than a counter, and on Windows it costs a PowerShell call of a
+   * second or more (the storage reliability counters dominate). Fifteen seconds
+   * tracks a thermal trend perfectly well at a fraction of the cost.
+   */
+  temperatureIntervalMs: 15_000,
 }
 
 /**
@@ -71,7 +81,7 @@ const DEFAULTS = {
  * line entirely; unset follows the open sessions.
  * @param {object} [config] - the row's `config` block.
  * @param {string} platform - the reporting platform.
- * @returns {{refreshIntervalMs: number, processLimit: number, cacheMillis: number, sampleMillis: number, projectDir: string | null, projectDirHidden: boolean, projectDirEntryBudget: number, projectDirMaxDirs: number}} resolved options.
+ * @returns {{refreshIntervalMs: number, processLimit: number, cacheMillis: number, sampleMillis: number, projectDir: string | null, projectDirHidden: boolean, projectDirEntryBudget: number, projectDirMaxDirs: number, temperatureHidden: boolean, temperatureIntervalMs: number}} resolved options.
  */
 export function resolveConfig(config, platform) {
   const source = config ?? {}
@@ -84,6 +94,10 @@ export function resolveConfig(config, platform) {
     typeof source.projectDir === 'string' || typeof source.projectDir === 'boolean'
       ? source.projectDir
       : null
+  // `temperature: false` (or `''`) removes the card entirely, the same way the
+  // project-directory line is hidden — a machine whose sensors cost a helper call
+  // may reasonably want the feature off rather than merely calmer.
+  const temperatureConfig = source.temperature
   return {
     refreshIntervalMs: positive(source.refreshIntervalMs, DEFAULT_REFRESH_MS[platform] ?? 4000, 500, 60000),
     processLimit: positive(source.processLimit, DEFAULTS.processLimit, 5, 500),
@@ -93,6 +107,13 @@ export function resolveConfig(config, platform) {
     projectDirHidden: projectDirConfig === '' || projectDirConfig === false,
     projectDirEntryBudget: positive(source.projectDirEntryBudget, DEFAULTS.projectDirEntryBudget, 100, 1_000_000),
     projectDirMaxDirs: positive(source.projectDirMaxDirs, DEFAULTS.projectDirMaxDirs, 1, 100),
+    temperatureHidden: temperatureConfig === false || temperatureConfig === '',
+    temperatureIntervalMs: positive(
+      source.temperatureIntervalMs,
+      DEFAULTS.temperatureIntervalMs,
+      2000,
+      600000,
+    ),
   }
 }
 
@@ -207,6 +228,12 @@ export function apply(ctx, config) {
   const reader = selectReader(platform)
   const sampler = createSampler({ sampleMillis: options.sampleMillis, cacheMillis: options.cacheMillis, reader })
 
+  // The temperature card reads on its own, much calmer cadence: it is an absolute
+  // reading rather than a counter, and on Windows it costs a PowerShell call of a
+  // second or more. The probe serves a stale reading immediately and refreshes
+  // behind the poll, so this never delays a snapshot.
+  const temperatureProbe = createTemperatureProbe({ intervalMs: options.temperatureIntervalMs })
+
   // The session services are optional, and Cordis refuses a bare property read
   // without an inject declaration, so both are captured through inject
   // contributions instead: a deployment without them leaves the references
@@ -237,6 +264,9 @@ export function apply(ctx, config) {
   // reverse, drains an in-flight sample after the route stops accepting
   // requests. The route's own registration is already owned by this fiber.
   ctx.effect(() => () => sampler.pending(), 'perfmon: drain in-flight sample')
+  // A temperature read in flight at unload is drained for the same reason: a
+  // PowerShell call left running would outlive the route that asked for it.
+  ctx.effect(() => () => temperatureProbe.pending(), 'perfmon: drain in-flight temperature read')
   // Unloading the plugin stops a running scan first: a fiber teardown must not
   // leave a walk running against a dead route.
   ctx.effect(
@@ -284,6 +314,22 @@ export function apply(ctx, config) {
           sort: body?.sort,
           limit: body?.limit ?? options.processLimit,
         })
+        // The temperature read is awaited, but the probe serves a cached reading
+        // instantly once it has one — only the very first request pays the read,
+        // which is exactly the one whose first paint should carry a number.
+        let temperature
+        try {
+          temperature = options.temperatureHidden ? HIDDEN_TEMPERATURE : await temperatureProbe.read()
+        } catch (error) {
+          ctx.logger?.warn?.('perfmon: temperature read failed: %s', error?.message ?? String(error))
+          temperature = {
+            status: 'unavailable',
+            at: null,
+            source: null,
+            groups: { cpu: null, gpu: null, mainboard: null, disk: null },
+            warnings: ['temperature-unavailable'],
+          }
+        }
         let disk
         try {
           disk = options.projectDirHidden
@@ -311,7 +357,14 @@ export function apply(ctx, config) {
           value: {
             ...reading,
             disk,
-            warnings: [...(reading.warnings ?? []), ...disk.warnings],
+            temperature,
+            // A hidden card contributes no warning: the user asked for it to be
+            // absent, so there is nothing to explain.
+            warnings: [
+              ...(reading.warnings ?? []),
+              ...disk.warnings,
+              ...(options.temperatureHidden ? [] : temperature.warnings),
+            ],
             refreshIntervalMs: options.refreshIntervalMs,
           },
         })

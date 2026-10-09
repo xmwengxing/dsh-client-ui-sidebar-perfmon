@@ -17,6 +17,7 @@ export {
   readStoredWidths,
 } from '../../src/client/ProcessPanel.jsx'
 export { GaugePanel, DiskPanel, GAUGE_RING } from '../../src/client/GaugePanel.jsx'
+export { TemperaturePanel, TEMPERATURE_TILES, TEMPERATURE_TONES, temperatureTone } from '../../src/client/TemperaturePanel.jsx'
 export { HeaderButton } from '../../src/client/HeaderButton.jsx'
 export { PerfmonIcon } from '../../src/client/Icon.jsx'
 export { createTranslator, describeState, describeWarning, resolveLanguage } from '../../src/client/copy.js'
@@ -24,6 +25,7 @@ export {
   formatBytes,
   formatPercent,
   formatShare,
+  formatCelsius,
   formatDuration,
   formatClock,
   barWidth,

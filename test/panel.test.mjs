@@ -25,10 +25,15 @@ const {
   ProcessPanel,
   GaugePanel,
   DiskPanel,
+  TemperaturePanel,
+  TEMPERATURE_TILES,
+  TEMPERATURE_TONES,
+  temperatureTone,
   HeaderButton,
   GAUGE_RING,
   createTranslator,
   formatShare,
+  formatCelsius,
   SNAPSHOT_PATH,
 } = require(resolve(root, 'test/.build/components.cjs'))
 
@@ -101,6 +106,35 @@ function readingFixture(overrides = {}) {
       { pid: 1, name: 'heavy-cpu', state: 'R', threads: 4, rssBytes: 10 * 1024 ** 2, memPercent: 0.1, cpuPercent: 88.8 },
       { pid: 2, name: 'heavy-mem', state: 'S', threads: 9, rssBytes: 4 * 1024 ** 3, memPercent: 25, cpuPercent: 1.2 },
     ],
+    ...overrides,
+  }
+}
+
+/**
+ * A temperature reading in the shape the host serves: four tiles, one of them
+ * unavailable, so both the answered and the unanswered path are exercised.
+ */
+function temperatureFixture(overrides = {}) {
+  return {
+    status: 'ready',
+    at: 1700000000000,
+    source: 'windows-cim',
+    groups: {
+      cpu: null,
+      gpu: { celsius: 53, min: 53, max: 53, count: 1, sensors: [{ label: 'NVIDIA GeForce GTX 1080 Ti', celsius: 53 }] },
+      mainboard: { celsius: 27.9, min: 27.9, max: 27.9, count: 1, sensors: [{ label: 'TZ00_0', celsius: 27.9 }] },
+      disk: {
+        celsius: 40,
+        min: 38,
+        max: 40,
+        count: 2,
+        sensors: [
+          { label: 'ST2000DM005', celsius: 38 },
+          { label: 'SSD 512GB', celsius: 40 },
+        ],
+      },
+    },
+    warnings: ['temperature-cpu-unavailable'],
     ...overrides,
   }
 }
@@ -800,4 +834,151 @@ test('each fixed column is adjustable from a divider in the header', async (cont
     mem: COLUMN_LIMITS.mem.fallback,
   })
   delete globalThis.localStorage
+})
+
+// ------------------------------------------------------------ temperatures
+
+test('the temperature card shows one tile each for CPU, GPU, board and drives', async (context) => {
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: temperatureFixture() }, t }),
+  )
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempLabel'), ['CPU', '显卡', '主板', '硬盘'])
+  // The unavailable CPU tile is a dash, and the answered ones carry their reading
+  // with the unit beside it.
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempValue'), ['—', '53.0°C', '27.9°C', '40.0°C'])
+})
+
+test('a tile with several sensors reports its spread and names them in the tooltip', async (context) => {
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: temperatureFixture() }, t }),
+  )
+  const tiles = renderer.root.findAll((node) =>
+    String(node.props.className ?? '').includes('dsh-perfmon-temp '),
+  )
+  assert.equal(tiles.length, 4)
+  // The drive tile has two sensors, so its detail is the range rather than a name.
+  const diskDetail = textsOf(renderer, 'dsh-perfmon-tempDetail')[3]
+  assert.match(diskDetail, /最低 38\.0 · 最高 40\.0/)
+  // The tooltip is where every drive is named.
+  assert.match(tiles[3].props.title, /ST2000DM005: 38\.0°C/)
+  assert.match(tiles[3].props.title, /SSD 512GB: 40\.0°C/)
+  // A single-sensor tile names that sensor instead of inventing a range.
+  assert.equal(textsOf(renderer, 'dsh-perfmon-tempDetail')[1], 'NVIDIA GeForce GTX 1080 Ti')
+})
+
+test('a temperature reading the host could not make shows four dashes, never zeroes', async (context) => {
+  const unavailable = temperatureFixture({
+    status: 'unavailable',
+    source: null,
+    groups: { cpu: null, gpu: null, mainboard: null, disk: null },
+  })
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: unavailable }, t }),
+  )
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempValue'), ['—', '—', '—', '—'])
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-tempDetail'), ['—', '—', '—', '—'])
+  assert.match(textsOf(renderer, 'dsh-perfmon-cardMeta')[0], /不可用/)
+})
+
+test('a hidden temperature card renders nothing at all', async (context) => {
+  const hidden = temperatureFixture({ status: 'hidden', warnings: ['temperature-hidden'] })
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: hidden }, t }),
+  )
+  assert.equal(renderer.toJSON(), null)
+
+  // And a reading with no temperature block at all — an older host — is silent
+  // rather than a crash.
+  const absent = await mount(context, React.createElement(TemperaturePanel, { reading: {}, t }))
+  assert.equal(absent.toJSON(), null)
+})
+
+test('the tile tone tracks the reading against the warm and hot lines', async (context) => {
+  assert.equal(temperatureTone(null), 'unknown')
+  assert.equal(temperatureTone(undefined), 'unknown')
+  assert.equal(temperatureTone(45), 'cool')
+  assert.equal(temperatureTone(TEMPERATURE_TONES.warm - 0.1), 'cool')
+  assert.equal(temperatureTone(TEMPERATURE_TONES.warm), 'warm')
+  assert.equal(temperatureTone(TEMPERATURE_TONES.hot - 0.1), 'warm')
+  assert.equal(temperatureTone(TEMPERATURE_TONES.hot), 'hot')
+  assert.equal(temperatureTone(99), 'hot')
+
+  // The tone reaches the DOM as a class, which is what colours the tile.
+  const reading = temperatureFixture({
+    groups: {
+      cpu: { celsius: 91, min: 91, max: 91, count: 1, sensors: [{ label: 'pkg', celsius: 91 }] },
+      gpu: null,
+      mainboard: { celsius: 30, min: 30, max: 30, count: 1, sensors: [{ label: 'board', celsius: 30 }] },
+      disk: null,
+    },
+  })
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: reading }, t }),
+  )
+  const tones = renderer.root
+    .findAll((node) => String(node.props.className ?? '').includes('dsh-perfmon-temp--'))
+    .map((node) => node.props.className.match(/dsh-perfmon-temp--(\w+)/)[1])
+  assert.deepEqual(tones, ['hot', 'unknown', 'cool', 'unknown'])
+})
+
+test('the temperature card sits directly under the resource card', async (context) => {
+  const renderer = await mount(
+    context,
+    React.createElement(PerfmonBody, {
+      t,
+      load: async () => readingFixture({ temperature: temperatureFixture(), warnings: [] }),
+    }),
+  )
+  await TestRenderer.act(async () => {})
+  // The two cards are siblings inside the panel root, in that order.
+  const rootNode = renderer.root.find((node) => String(node.props.className ?? '') === 'dsh-perfmon-root')
+  const titles = rootNode
+    .findAll((node) => node.props.className === 'dsh-perfmon-cardTitle', { deep: true })
+    .map((node) => node.children.join(''))
+  assert.deepEqual(titles, ['资源占用', '温度', '进程列表'])
+})
+
+test('the panel explains an unreadable temperature rather than showing a bare dash', async (context) => {
+  const renderer = await mount(
+    context,
+    React.createElement(PerfmonBody, {
+      t,
+      load: async () =>
+        readingFixture({
+          temperature: temperatureFixture({
+            groups: { cpu: null, gpu: null, mainboard: null, disk: null },
+            warnings: ['temperature-cpu-unavailable'],
+          }),
+          warnings: ['temperature-cpu-unavailable'],
+        }),
+    }),
+  )
+  await TestRenderer.act(async () => {})
+  const warningItems = renderer.root
+    .findAll((node) => node.type === 'li' && typeof node.children[0] === 'string')
+    .map((node) => node.children.join(''))
+  assert.ok(
+    warningItems.some((line) => line.includes('CPU 温度不可读')),
+    'the panel must say why the CPU tile is empty',
+  )
+})
+
+test('a Celsius reading is formatted to the tenth, and a missing one is a dash', () => {
+  assert.equal(formatCelsius(27.850000000000023), '27.9')
+  assert.equal(formatCelsius(0), '0.0', 'a genuine zero is a reading, not a gap')
+  assert.equal(formatCelsius(null), '—')
+  assert.equal(formatCelsius(undefined), '—')
+  assert.equal(formatCelsius(Number.NaN), '—')
+})
+
+test('the four tiles are the four components the feature promises, in order', () => {
+  assert.deepEqual(
+    TEMPERATURE_TILES.map((tile) => tile.kind),
+    ['cpu', 'gpu', 'mainboard', 'disk'],
+  )
 })

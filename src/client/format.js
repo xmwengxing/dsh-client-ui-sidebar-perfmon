@@ -85,6 +85,22 @@ export function formatClock(timestamp) {
 }
 
 /**
+ * Format a Celsius reading for the temperature card.
+ *
+ * One decimal place, because the useful resolution is a tenth of a degree — a
+ * sensor reading 27.9 and one reading 28.0 are the same machine. A missing
+ * reading is the em dash, never `0°C`, which would read as "freezing" rather than
+ * "not measured".
+ * @param {number | null | undefined} celsius - the reading.
+ * @param {string} [empty] - text for a missing value.
+ * @returns {string} a reading such as `47.5`, without the unit.
+ */
+export function formatCelsius(celsius, empty = EMPTY) {
+  if (typeof celsius !== 'number' || !Number.isFinite(celsius)) return empty
+  return celsius.toFixed(1)
+}
+
+/**
  * Clamp a value into the 0–100 range a bar width can use.
  * @param {number | null | undefined} value - the percentage.
  * @returns {number} a width percentage.

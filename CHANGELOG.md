@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.4.0
+
+- **A temperature card, directly under the resource card.** Four tiles — CPU, GPU,
+  motherboard and drives — each showing its reading, its label and one line of
+  supporting detail, coloured on a cool / warm / hot scale (70 °C and 85 °C).
+  A component with several sensors (a package and its cores, two drives) shows its
+  hottest reading as the headline and names every sensor in the tooltip.
+- **Attribution is the point, and it is deliberately conservative.** Windows has no
+  single temperature source, so four are tried and each is bucketed where it
+  belongs: LibreHardwareMonitor / OpenHardwareMonitor (the only source that can
+  answer **CPU**, read first for that reason), `nvidia-smi` for the GPU,
+  `Get-StorageReliabilityCounter` for the drives, and the ACPI thermal zone — which
+  is published as the **motherboard**, never as the CPU. That last rule was
+  measured, not assumed: on the development machine the ACPI zone reported a fixed
+  27.9 °C through a full-core burn, so promoting it to the CPU tile would have been
+  a fabricated number that never moved.
+- **Linux** reads `/sys/class/hwmon` (chip name → bucket, `tempN_input` /
+  `tempN_label` → reading), falling back to `/sys/class/thermal` only when no
+  hwmon chip exists, so the same ACPI zone is never listed twice. An unrecognised
+  chip is reported as `other` rather than guessed into the CPU bucket.
+- **macOS** tries `powermetrics` (which needs root), then `osx-cpu-temp`, then
+  `istats`, and reports the temperature as unavailable when none of them can
+  answer. A stock Mac genuinely cannot be read by an unprivileged process, and
+  the panel says so instead of inventing a figure.
+- **The card reads on its own calmer cadence** (`temperatureIntervalMs`, 15s by
+  default) rather than the metrics poll. A temperature is an absolute reading with
+  nothing to difference, and on Windows it costs a PowerShell call of a second or
+  more (the storage reliability counters dominate; measured ~1.6–2.8s). The probe
+  serves a cached reading instantly, waits only for its very first read so the
+  panel's first paint carries a real number, refreshes stale readings behind the
+  poll, and shares one in-flight read between every open panel.
+- **Unavailable stays unavailable.** A component no source can answer is a dash
+  with its reason in the warnings list, never a zero and never another component's
+  figure. `temperature: false` (or `''`) removes the card entirely.
+- New host field in the snapshot: `temperature` (`status` (`ready` |
+  `unavailable` | `hidden`), `at`, `source`, `groups` — one entry per component
+  with `celsius` / `min` / `max` / `count` / `sensors[]`, or `null`), merged into
+  the response's top-level `warnings`.
+- Tests: 127 specs, adding the temperature sources' parsers and attribution rules
+  per platform (including the ACPI-zone-is-not-the-CPU guard, a drive counter that
+  answers 0, a sensor list that arrives as a single object, and `Number(null)`
+  coercing to a confident -273.15 °C), the probe's cache / staleness / in-flight
+  sharing, and the card's rendering, tones and dash-instead-of-zero behaviour.
+
 ## 0.3.2
 
 - **Fixed: the panel never mounted on dsh 0.2.0-rc.2.** The manifest's

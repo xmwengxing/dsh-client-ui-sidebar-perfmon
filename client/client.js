@@ -42,6 +42,15 @@ var ZH = {
   headerButtonOpen: "\u6253\u5F00\u6027\u80FD\u76D1\u63A7\u9762\u677F",
   resources: "\u8D44\u6E90\u5360\u7528",
   processes: "\u8FDB\u7A0B\u5217\u8868",
+  temperatures: "\u6E29\u5EA6",
+  temperatureCpu: "CPU",
+  temperatureGpu: "\u663E\u5361",
+  temperatureMainboard: "\u4E3B\u677F",
+  temperatureDisk: "\u786C\u76D8",
+  temperatureUnit: "\xB0C",
+  temperatureRange: "\u6700\u4F4E {min} \xB7 \u6700\u9AD8 {max}",
+  temperatureSensors: "{count} \u4E2A\u4F20\u611F\u5668",
+  temperatureUnavailableShort: "\u4E0D\u53EF\u7528",
   projectDir: "\u9879\u76EE\u76EE\u5F55",
   measureStart: "\u7EDF\u8BA1\u5F53\u524D\u4F1A\u8BDD\u76EE\u5F55",
   measureStartSession: "\u7EDF\u8BA1\u5F53\u524D\u4F1A\u8BDD\u7684\u76EE\u5F55\uFF08{id}\uFF09",
@@ -119,7 +128,15 @@ var ZH = {
     "project-dir-hidden": "\u76EE\u5F55\u5927\u5C0F\u7EDF\u8BA1\u5DF2\u5728\u914D\u7F6E\u4E2D\u5173\u95ED",
     "project-dir-partial": "\u76EE\u5F55\u6761\u76EE\u8FC7\u591A\uFF0C\u7EDF\u8BA1\u5DF2\u63D0\u524D\u622A\u65AD\uFF0C\u5B9E\u9645\u5360\u7528\u53EF\u80FD\u66F4\u5927",
     "project-dir-skipped": "\u90E8\u5206\u5B50\u76EE\u5F55\u4E0D\u53EF\u8BFB\uFF0C\u76EE\u5F55\u5927\u5C0F\u7EDF\u8BA1\u504F\u4F4E",
-    "project-dir-dropped": "\u6D3B\u8DC3\u5DE5\u4F5C\u533A\u76EE\u5F55\u8FC7\u591A\uFF0C\u4EC5\u7EDF\u8BA1\u5176\u4E2D\u4E00\u90E8\u5206"
+    "project-dir-dropped": "\u6D3B\u8DC3\u5DE5\u4F5C\u533A\u76EE\u5F55\u8FC7\u591A\uFF0C\u4EC5\u7EDF\u8BA1\u5176\u4E2D\u4E00\u90E8\u5206",
+    "temperature-hidden": "\u6E29\u5EA6\u5361\u7247\u5DF2\u5728\u914D\u7F6E\u4E2D\u5173\u95ED",
+    "temperature-unavailable": "\u672C\u673A\u6CA1\u6709\u53EF\u8BFB\u53D6\u7684\u6E29\u5EA6\u4F20\u611F\u5668",
+    "temperature-cpu-unavailable": "CPU \u6E29\u5EA6\u4E0D\u53EF\u8BFB\u2014\u2014Windows \u9700\u5B89\u88C5\u5E76\u8FD0\u884C LibreHardwareMonitor \u7B49\u786C\u4EF6\u76D1\u63A7",
+    "temperature-gpu-unavailable": "\u663E\u5361\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
+    "temperature-mainboard-unavailable": "\u4E3B\u677F\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
+    "temperature-disk-unavailable": "\u786C\u76D8\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
+    "temperature-json-unreadable": "\u6E29\u5EA6\u67E5\u8BE2\u8F93\u51FA\u65E0\u6CD5\u89E3\u6790",
+    "temperature-failed": "\u6E29\u5EA6\u67E5\u8BE2\u5931\u8D25"
   }
 };
 var EN = {
@@ -130,6 +147,15 @@ var EN = {
   headerButtonOpen: "Open the performance monitor",
   resources: "Resource usage",
   processes: "Processes",
+  temperatures: "Temperatures",
+  temperatureCpu: "CPU",
+  temperatureGpu: "GPU",
+  temperatureMainboard: "Motherboard",
+  temperatureDisk: "Drives",
+  temperatureUnit: "\xB0C",
+  temperatureRange: "min {min} \xB7 max {max}",
+  temperatureSensors: "{count} sensors",
+  temperatureUnavailableShort: "unavailable",
   projectDir: "Project folder",
   measureStart: "Measure the current session folders",
   measureStartSession: "Measure the current session folders ({id})",
@@ -207,7 +233,15 @@ var EN = {
     "project-dir-hidden": "Folder-size metering is disabled in the configuration",
     "project-dir-partial": "A folder has too many entries; the scan stopped early and the total may be low",
     "project-dir-skipped": "Some subfolders could not be read, so folder sizes are understated",
-    "project-dir-dropped": "More open workspaces than one scan covers; only some were measured"
+    "project-dir-dropped": "More open workspaces than one scan covers; only some were measured",
+    "temperature-hidden": "The temperature card is disabled in the configuration",
+    "temperature-unavailable": "This host exposes no readable temperature sensor",
+    "temperature-cpu-unavailable": "CPU temperature is unreadable \u2014 on Windows this needs a hardware monitor such as LibreHardwareMonitor",
+    "temperature-gpu-unavailable": "GPU temperature is unreadable",
+    "temperature-mainboard-unavailable": "Motherboard temperature is unreadable",
+    "temperature-disk-unavailable": "Drive temperature is unreadable",
+    "temperature-json-unreadable": "The temperature query output could not be parsed",
+    "temperature-failed": "The temperature query failed"
   }
 };
 function resolveLanguage() {
@@ -792,6 +826,88 @@ var STYLES = `
   color: var(--dsw-alias-label-tertiary, currentColor);
 }
 
+/* The temperature card sits under the resource card. Like it, it keeps the height
+   its content needs: in a short pane the process list is what gives way, never
+   these four tiles. */
+.dsh-perfmon-temps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 10px 12px 12px;
+  flex: 0 0 auto;
+}
+
+.dsh-perfmon-temp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 6px 6px;
+  min-inline-size: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(127, 127, 127, 0.24));
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, rgba(127, 127, 127, 0.06));
+  /* The tile is a fixed control: without this a tight card squeezes it and the
+     reading collides with the label. */
+  flex: none;
+}
+
+.dsh-perfmon-tempValue {
+  font: var(--dsw-font-sm-strong-13, 600 13px/1.2 var(--dsw-font-family, system-ui));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary, currentColor);
+}
+
+.dsh-perfmon-tempUnit {
+  margin-inline-start: 1px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary, currentColor);
+}
+
+.dsh-perfmon-tempLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary, currentColor);
+}
+
+.dsh-perfmon-tempDetail {
+  font-size: 10px;
+  color: var(--dsw-alias-label-tertiary, currentColor);
+  font-variant-numeric: tabular-nums;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Three tones, each a border and a value colour rather than a filled block: a
+   filled tile at four across would shout, and the reading has to stay the thing
+   the eye lands on. The unknown tone is the plain card border. */
+.dsh-perfmon-temp--cool {
+  border-color: var(--dsw-alias-state-success-secondary, rgba(80, 170, 120, 0.4));
+}
+
+.dsh-perfmon-temp--cool .dsh-perfmon-tempValue {
+  color: var(--dsw-alias-state-success-primary, currentColor);
+}
+
+.dsh-perfmon-temp--warm {
+  border-color: var(--dsw-alias-state-warn-secondary, rgba(217, 154, 43, 0.5));
+}
+
+.dsh-perfmon-temp--warm .dsh-perfmon-tempValue {
+  color: var(--dsw-alias-state-warn-primary, currentColor);
+}
+
+.dsh-perfmon-temp--hot {
+  border-color: var(--dsw-alias-state-error-secondary, rgba(200, 80, 80, 0.5));
+}
+
+.dsh-perfmon-temp--hot .dsh-perfmon-tempValue {
+  color: var(--dsw-alias-state-error-primary, currentColor);
+}
+
 .dsh-perfmon-headerButton {
   display: inline-flex;
   align-items: center;
@@ -834,7 +950,7 @@ function installStyles() {
 }
 
 // src/client/PerfmonBody.jsx
-var import_react3 = require("react");
+var import_react4 = require("react");
 
 // src/client/api.js
 var SNAPSHOT_PATH = "/api/perfmon.snapshot";
@@ -902,6 +1018,10 @@ function formatClock(timestamp) {
   const date = new Date(timestamp);
   const pad = (value) => String(value).padStart(2, "0");
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+function formatCelsius(celsius, empty = EMPTY) {
+  if (typeof celsius !== "number" || !Number.isFinite(celsius)) return empty;
+  return celsius.toFixed(1);
 }
 function barWidth(value) {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -1401,6 +1521,81 @@ function ProcessPanel({ reading, sort, onSortChange, t }) {
   );
 }
 
+// src/client/TemperaturePanel.jsx
+var import_react3 = require("react");
+var TEMPERATURE_TILES = [
+  { kind: "cpu", key: "temperatureCpu", tone: "cpu" },
+  { kind: "gpu", key: "temperatureGpu", tone: "gpu" },
+  { kind: "mainboard", key: "temperatureMainboard", tone: "mainboard" },
+  { kind: "disk", key: "temperatureDisk", tone: "disk" }
+];
+var TEMPERATURE_TONES = { warm: 70, hot: 85 };
+function temperatureTone(celsius) {
+  if (typeof celsius !== "number" || !Number.isFinite(celsius)) return "unknown";
+  if (celsius >= TEMPERATURE_TONES.hot) return "hot";
+  if (celsius >= TEMPERATURE_TONES.warm) return "warm";
+  return "cool";
+}
+function tileDetail(group, t) {
+  if (group == null) return EMPTY;
+  if (group.count > 1) {
+    return t("temperatureRange", {
+      min: formatCelsius(group.min),
+      max: formatCelsius(group.max)
+    });
+  }
+  const label = group.sensors?.[0]?.label;
+  return typeof label === "string" && label !== "" ? label : t("temperatureSensors", { count: String(group.count) });
+}
+function TemperaturePanel({ reading, t }) {
+  const temperature = reading?.temperature;
+  if (temperature == null) return null;
+  if (temperature.status === "hidden") return null;
+  const groups = temperature.groups ?? {};
+  return (0, import_react3.createElement)(
+    "section",
+    { className: "dsh-perfmon-card", "aria-label": t("temperatures") },
+    (0, import_react3.createElement)(
+      "div",
+      { className: "dsh-perfmon-cardHead" },
+      (0, import_react3.createElement)("span", { className: "dsh-perfmon-cardTitle" }, t("temperatures")),
+      // The source and the reading's age are what make a temperature trustworthy:
+      // the number moves on its own cadence, not on the panel's poll.
+      (0, import_react3.createElement)(
+        "span",
+        {
+          className: "dsh-perfmon-cardMeta",
+          title: typeof temperature.source === "string" ? temperature.source : void 0
+        },
+        temperature.status === "unavailable" ? t("temperatureUnavailableShort") : [t("temperatureUnit"), typeof temperature.source === "string" ? temperature.source : void 0].filter((part) => typeof part === "string" && part !== "").join(" \xB7 ")
+      )
+    ),
+    (0, import_react3.createElement)(
+      "div",
+      { className: "dsh-perfmon-temps" },
+      TEMPERATURE_TILES.map((tile) => {
+        const group = groups[tile.kind] ?? null;
+        const celsius = group?.celsius ?? null;
+        const tone = temperatureTone(celsius);
+        const sensors = Array.isArray(group?.sensors) ? group.sensors : [];
+        const title = sensors.length > 0 ? sensors.map((sensor) => `${sensor.label}: ${formatCelsius(sensor.celsius)}${t("temperatureUnit")}`).join("\n") : void 0;
+        return (0, import_react3.createElement)(
+          "div",
+          { key: tile.kind, className: `dsh-perfmon-temp dsh-perfmon-temp--${tone}`, title },
+          (0, import_react3.createElement)(
+            "span",
+            { className: "dsh-perfmon-tempValue" },
+            formatCelsius(celsius),
+            celsius === null ? null : (0, import_react3.createElement)("span", { className: "dsh-perfmon-tempUnit" }, t("temperatureUnit"))
+          ),
+          (0, import_react3.createElement)("span", { className: "dsh-perfmon-tempLabel" }, t(tile.key)),
+          (0, import_react3.createElement)("span", { className: "dsh-perfmon-tempDetail", title }, tileDetail(group, t))
+        );
+      })
+    )
+  );
+}
+
 // src/client/PerfmonBody.jsx
 var DEFAULT_INTERVAL_MS = 2e3;
 var NAME_SORT_LIMIT = 300;
@@ -1409,15 +1604,15 @@ function isHidden() {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
 function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
-  const [sort, setSort] = (0, import_react3.useState)("cpu");
-  const [nonce, setNonce] = (0, import_react3.useState)(0);
-  const [state, setState] = (0, import_react3.useState)({ status: "loading", reading: void 0, error: void 0, intervalMs: DEFAULT_INTERVAL_MS });
-  const aliveRef = (0, import_react3.useRef)(true);
-  const sortRef = (0, import_react3.useRef)(sort);
+  const [sort, setSort] = (0, import_react4.useState)("cpu");
+  const [nonce, setNonce] = (0, import_react4.useState)(0);
+  const [state, setState] = (0, import_react4.useState)({ status: "loading", reading: void 0, error: void 0, intervalMs: DEFAULT_INTERVAL_MS });
+  const aliveRef = (0, import_react4.useRef)(true);
+  const sortRef = (0, import_react4.useRef)(sort);
   sortRef.current = sort;
-  const measureRef = (0, import_react3.useRef)(null);
-  const fallbackSessionId = (0, import_react3.useSyncExternalStore)(
-    (0, import_react3.useCallback)(
+  const measureRef = (0, import_react4.useRef)(null);
+  const fallbackSessionId = (0, import_react4.useSyncExternalStore)(
+    (0, import_react4.useCallback)(
       (onStoreChange) => {
         const mounted = ctx?.get?.("sidebarRight")?.mounted;
         if (mounted === void 0 || mounted === null) return () => {
@@ -1433,15 +1628,15 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
     () => void 0
   );
   const activeSessionId = typeof sessionId === "string" && sessionId !== "" ? sessionId : fallbackSessionId;
-  const sessionRef = (0, import_react3.useRef)(activeSessionId);
+  const sessionRef = (0, import_react4.useRef)(activeSessionId);
   sessionRef.current = activeSessionId;
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
     };
   }, []);
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     let timer;
     let controller;
     let stopped = false;
@@ -1505,30 +1700,30 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
       }
     };
   }, [load, sort, nonce]);
-  const refresh = (0, import_react3.useCallback)(() => {
+  const refresh = (0, import_react4.useCallback)(() => {
     setNonce((value) => value + 1);
   }, []);
-  const setMeasure = (0, import_react3.useCallback)((value) => {
+  const setMeasure = (0, import_react4.useCallback)((value) => {
     measureRef.current = value;
     setNonce((n) => n + 1);
   }, []);
   const { reading, status, error, intervalMs } = state;
   const failed = status === "error";
-  return (0, import_react3.createElement)(
+  return (0, import_react4.createElement)(
     "div",
     { className: "dsh-perfmon-root" },
-    failed ? (0, import_react3.createElement)(
+    failed ? (0, import_react4.createElement)(
       "div",
       { className: "dsh-perfmon-notice" },
-      (0, import_react3.createElement)("div", null, `${t("errorTitle")}: ${error ?? ""}`),
-      (0, import_react3.createElement)(
+      (0, import_react4.createElement)("div", null, `${t("errorTitle")}: ${error ?? ""}`),
+      (0, import_react4.createElement)(
         "button",
         { type: "button", className: "dsh-perfmon-action", onClick: refresh, style: { marginBlockStart: "6px" } },
         t("retry")
       )
     ) : null,
-    status === "loading" && reading === void 0 ? (0, import_react3.createElement)("div", { className: "dsh-perfmon-empty" }, t("loading")) : null,
-    reading === void 0 ? null : (0, import_react3.createElement)(GaugePanel, {
+    status === "loading" && reading === void 0 ? (0, import_react4.createElement)("div", { className: "dsh-perfmon-empty" }, t("loading")) : null,
+    reading === void 0 ? null : (0, import_react4.createElement)(GaugePanel, {
       reading,
       t,
       sessionId: activeSessionId,
@@ -1538,28 +1733,33 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
         onStop: () => setMeasure(false)
       }
     }),
+    // The temperature card, directly under the resource card. It renders from the
+    // same reading but refreshes on the host's own calmer cadence, so the numbers
+    // here can be older than the gauges above — which the card says by naming its
+    // source and its own reading time.
+    reading === void 0 ? null : (0, import_react4.createElement)(TemperaturePanel, { reading, t }),
     // A platform that cannot answer a field says so here rather than leaving the
     // panel silently short of a number.
-    Array.isArray(reading?.warnings) && reading.warnings.length > 0 ? (0, import_react3.createElement)(
+    Array.isArray(reading?.warnings) && reading.warnings.length > 0 ? (0, import_react4.createElement)(
       "div",
       { className: "dsh-perfmon-notice dsh-perfmon-notice--muted" },
-      (0, import_react3.createElement)("div", null, t("warnings")),
-      (0, import_react3.createElement)(
+      (0, import_react4.createElement)("div", null, t("warnings")),
+      (0, import_react4.createElement)(
         "ul",
         { className: "dsh-perfmon-warningList" },
         reading.warnings.map(
-          (code) => (0, import_react3.createElement)("li", { key: code }, describeWarning(t, String(code)))
+          (code) => (0, import_react4.createElement)("li", { key: code }, describeWarning(t, String(code)))
         )
       )
     ) : null,
-    reading === void 0 ? null : (0, import_react3.createElement)(ProcessPanel, { reading, sort, onSortChange: setSort, t }),
-    (0, import_react3.createElement)(
+    reading === void 0 ? null : (0, import_react4.createElement)(ProcessPanel, { reading, sort, onSortChange: setSort, t }),
+    (0, import_react4.createElement)(
       "div",
       { className: "dsh-perfmon-foot" },
-      (0, import_react3.createElement)("span", null, t("updatedAt", { time: formatClock(reading?.window?.at) })),
-      (0, import_react3.createElement)("span", null, t("autoRefresh", { seconds: Math.round(intervalMs / 1e3) })),
-      status === "stale" && error !== void 0 ? (0, import_react3.createElement)("span", null, `${t("errorTitle")}: ${error}`) : null,
-      (0, import_react3.createElement)(
+      (0, import_react4.createElement)("span", null, t("updatedAt", { time: formatClock(reading?.window?.at) })),
+      (0, import_react4.createElement)("span", null, t("autoRefresh", { seconds: Math.round(intervalMs / 1e3) })),
+      status === "stale" && error !== void 0 ? (0, import_react4.createElement)("span", null, `${t("errorTitle")}: ${error}`) : null,
+      (0, import_react4.createElement)(
         "button",
         {
           type: "button",
@@ -1573,12 +1773,12 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
 }
 
 // src/client/HeaderButton.jsx
-var import_react5 = require("react");
+var import_react6 = require("react");
 
 // src/client/Icon.jsx
-var import_react4 = require("react");
+var import_react5 = require("react");
 function PerfmonIcon({ size = 16, className }) {
-  return (0, import_react4.createElement)(
+  return (0, import_react5.createElement)(
     "svg",
     {
       width: size,
@@ -1589,22 +1789,22 @@ function PerfmonIcon({ size = 16, className }) {
       "aria-hidden": "true",
       focusable: "false"
     },
-    (0, import_react4.createElement)("rect", { x: 1.25, y: 2.25, width: 13.5, height: 9, rx: 1.75, stroke: "currentColor", strokeWidth: 1.1 }),
-    (0, import_react4.createElement)("path", {
+    (0, import_react5.createElement)("rect", { x: 1.25, y: 2.25, width: 13.5, height: 9, rx: 1.75, stroke: "currentColor", strokeWidth: 1.1 }),
+    (0, import_react5.createElement)("path", {
       d: "M3.2 8.1h2.1l1.05-2.4 1.5 4.3 1.15-2.6h2.4",
       stroke: "currentColor",
       strokeWidth: 1.1,
       strokeLinecap: "round",
       strokeLinejoin: "round"
     }),
-    (0, import_react4.createElement)("path", { d: "M5.5 13.4h5", stroke: "currentColor", strokeWidth: 1.1, strokeLinecap: "round" })
+    (0, import_react5.createElement)("path", { d: "M5.5 13.4h5", stroke: "currentColor", strokeWidth: 1.1, strokeLinecap: "round" })
   );
 }
 
 // src/client/HeaderButton.jsx
 function HeaderButton({ sessionId, open, t }) {
   const label = t("headerButton");
-  return (0, import_react5.createElement)(
+  return (0, import_react6.createElement)(
     "button",
     {
       type: "button",
@@ -1615,8 +1815,8 @@ function HeaderButton({ sessionId, open, t }) {
         open(sessionId);
       }
     },
-    (0, import_react5.createElement)(PerfmonIcon, { size: 15 }),
-    (0, import_react5.createElement)("span", { className: "dsh-perfmon-headerButtonLabel" }, label)
+    (0, import_react6.createElement)(PerfmonIcon, { size: 15 }),
+    (0, import_react6.createElement)("span", { className: "dsh-perfmon-headerButtonLabel" }, label)
   );
 }
 

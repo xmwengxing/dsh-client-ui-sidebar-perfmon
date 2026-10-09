@@ -1,7 +1,7 @@
 {
   "name": "@xmwengxing/dsh-client-ui-sidebar-perfmon",
-  "version": "0.3.2",
-  "description": "Real-time host performance monitor for the DeepSeek Harness right Sidebar: CPU / memory / swap gauges plus a sortable process table — on Linux, macOS and Windows. · DSH 右侧栏实时性能监控：CPU / 内存 / 交换内存 仪表盘与可排序进程列表，支持 Linux / macOS / Windows。",
+  "version": "0.4.0",
+  "description": "Real-time host performance monitor for the DeepSeek Harness right Sidebar: CPU / memory / swap gauges, CPU / GPU / motherboard / drive temperatures, plus a sortable process table — on Linux, macOS and Windows. · DSH 右侧栏实时性能监控：CPU / 内存 / 交换内存 仪表盘，CPU / 显卡 / 主板 / 硬盘 温度，以及可排序进程列表，支持 Linux / macOS / Windows。",
   "keywords": [
     "deepseek",
     "deepseek-harness",
@@ -14,6 +14,9 @@
     "cpu",
     "memory",
     "process",
+    "temperature",
+    "sensor",
+    "gpu",
     "linux",
     "macos",
     "windows",

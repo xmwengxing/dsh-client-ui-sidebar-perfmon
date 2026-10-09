@@ -15,6 +15,7 @@ import { createElement as h, useCallback, useEffect, useRef, useState, useSyncEx
 import { fetchSnapshot } from './api.js'
 import { GaugePanel } from './GaugePanel.jsx'
 import { ProcessPanel } from './ProcessPanel.jsx'
+import { TemperaturePanel } from './TemperaturePanel.jsx'
 import { formatClock } from './format.js'
 import { describeWarning } from './copy.js'
 
@@ -209,6 +210,11 @@ export function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
             onStop: () => setMeasure(false),
           },
         }),
+    // The temperature card, directly under the resource card. It renders from the
+    // same reading but refreshes on the host's own calmer cadence, so the numbers
+    // here can be older than the gauges above — which the card says by naming its
+    // source and its own reading time.
+    reading === undefined ? null : h(TemperaturePanel, { reading, t }),
     // A platform that cannot answer a field says so here rather than leaving the
     // panel silently short of a number.
     Array.isArray(reading?.warnings) && reading.warnings.length > 0

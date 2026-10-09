@@ -7,20 +7,21 @@ untested that is said so explicitly.
 ## What this is
 
 A DeepSeek Harness (`dsh`) plugin that puts a live host performance monitor in the
-right Sidebar: CPU / memory / swap ring gauges and a process table you can sort and
-filter. One npm package, two halves — a host half that samples the machine and
-serves one authenticated route, and a browser half that registers a Sidebar page
-type and a Session-header button.
+right Sidebar: CPU / memory / swap ring gauges, a CPU / GPU / motherboard / drive
+temperature card, and a process table you can sort and filter. One npm package,
+two halves — a host half that samples the machine and serves one authenticated
+route, and a browser half that registers a Sidebar page type and a Session-header
+button.
 
 | | |
 | --- | --- |
 | Package | `@xmwengxing/dsh-client-ui-sidebar-perfmon` (kind `perfmon`) |
 | Repository | https://github.com/xmwengxing/dsh-client-ui-sidebar-perfmon |
 | Target | `dsh` **0.2.0-rc.1**, Node 24, npm 11, pnpm 12 |
-| Source version | **0.3.0** |
+| Source version | **0.4.0** |
 | Published on npm | 0.2.0, 0.2.2 — public, zero runtime dependencies |
 | GitHub Releases | v0.1.0, v0.2.0, v0.2.1, v0.2.2 (latest published) |
-| Tests | 78 specs across 6 files, all passing via `npm test` |
+| Tests | 127 specs across 7 files; 38 of them new in 0.4.0 |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
 
@@ -41,23 +42,29 @@ Relative to the repository root.
 | `src/host/readers/win32.js` | 203 | Windows: `os.cpus()` + one PowerShell call per sample. Exports the script and its parser. |
 | `src/host/readers/generic.js` | 68 | Fallback for any other platform: `node:os` only; swap and processes report unavailable. |
 | `src/host/readers/exec.js` | 109 | The one place a subprocess is spawned: timeout, no shell, stderr-carrying errors, injectable runner. |
-| `lib/index.js` | 761 built | Bundled host half. **Committed** (so a git install works even if the build is not allowed). |
+| `src/host/temperature/index.js` | 199 | The temperature probe: source selection, per-component aggregation, and its own calmer cache (serve-stale-while-refreshing). |
+| `src/host/temperature/win32.js` | 284 | Four Windows sources in one PowerShell call, and the attribution rules. Exports the script and its parser. |
+| `src/host/temperature/linux.js` | 233 | `/sys/class/hwmon`, falling back to `/sys/class/thermal`. The only source that spawns nothing. |
+| `src/host/temperature/darwin.js` | 141 | `powermetrics` (root) → `osx-cpu-temp` → `istats`; unavailable when none answers. Exports its parsers. |
+| `src/host/temperature/generic.js` | 68 | Fallback: a Linux-compatible hwmon tree, else FreeBSD `sysctl dev.cpu.N.temperature`. |
+| `lib/index.js` | built | Bundled host half. **Committed** (so a git install works even if the build is not allowed). |
 
 ### Browser half — runs in the GUI
 
 | File | Lines | What it does |
 | --- | --- | --- |
 | `src/client/index.jsx` | 118 | The client plugin: registers the tab type + guide entry, the panel body, and the header button. No `inject` list — services are resolved late through `ctx.inject`. |
-| `src/client/PerfmonBody.jsx` | 189 | The tab body: refresh loop, warnings notice, composes the two cards. |
-| `src/client/GaugePanel.jsx` | 240 | Resource window (three ring gauges plus the project-directory line with its start/stop scan button). Exports `GAUGE_RING`, `DiskPanel`. |
+| `src/client/PerfmonBody.jsx` | 250 | The tab body: refresh loop, warnings notice, composes the three cards. |
+| `src/client/GaugePanel.jsx` | 262 | Resource window (three ring gauges plus the project-directory line with its start/stop scan button). Exports `GAUGE_RING`, `DiskPanel`. |
+| `src/client/TemperaturePanel.jsx` | 141 | Temperature window: four tiles (CPU / GPU / board / drives) with their tones. Exports `TEMPERATURE_TILES`, `TEMPERATURE_TONES`, `temperatureTone`. |
 | `src/client/ProcessPanel.jsx` | 443 | Process window: the sort tags that double as column headers, the resizable column dividers, the search field, the rows. Exports `SORT_TAGS`, `COLUMN_LIMITS`, `clampColumnWidth`, `readStoredWidths`. |
 | `src/client/HeaderButton.jsx` | 42 | The Session-header control. |
 | `src/client/Icon.jsx` | 41 | The perfmon glyph. |
 | `src/client/api.js` | 42 | `fetchSnapshot()` — the one call to the host route. Exports `SNAPSHOT_PATH`. |
 | `src/client/copy.js` | 209 | zh/en dictionaries, language resolution, warning translation. No locale service dependency. |
-| `src/client/format.js` | 95 | Byte/percent/duration/clock formatting; `formatShare` for whole-percent cells. |
-| `src/client/styles.js` | 538 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
-| `client/client.js` | 1485 built | Bundled browser half, wrapped in the `window.__ModuleLoader__.load` envelope. **Committed.** |
+| `src/client/format.js` | 106 | Byte/percent/duration/clock/temperature formatting; `formatShare` for whole-percent cells. |
+| `src/client/styles.js` | 663 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
+| `client/client.js` | built | Bundled browser half, wrapped in the `window.__ModuleLoader__.load` envelope. **Committed.** |
 
 ### Build, tests, docs, tooling
 
@@ -71,8 +78,9 @@ Relative to the repository root.
 | `test/client-bundle.test.mjs` | 257 | Loads the shipped bundle like the module loader does; asserts registrations, that every component renders from its own inject face, and that no bare colour escapes a `var()`. |
 | `test/contract.test.mjs` | 168 | Re-reads the **installed** dsh packages to confirm slot names, service names, the route rule, and the bundle id still hold. Catches upstream renames. |
 | `test/metrics.test.mjs` | 242 | Differencing arithmetic against hand-built samples, plus live Linux checks (sampler, unit consistency). |
-| `test/panel.test.mjs` | 534 | Behavioural specs through `react-test-renderer`: gauges, tags, sorting, filtering, refresh, errors, all-unavailable readings, search field, column resizing. |
+| `test/panel.test.mjs` | 985 | Behavioural specs through `react-test-renderer`: gauges, temperature tiles and tones, tags, sorting, filtering, refresh, errors, all-unavailable readings, search field, column resizing. |
 | `test/readers.test.mjs` | 286 | Every platform parser against captured tool output, and every reader's failure path through an injected runner. |
+| `test/temperature.test.mjs` | 518 | Every temperature source's parsers and attribution rules, plus the probe's cache/staleness/in-flight behaviour. |
 | `test/du.test.mjs` | 284 | The scan controller: nothing starts implicitly, a stop lands between syscalls, the stored reading costs no filesystem work, budget/symlink/deduplication/drop rules, config resolution. |
 | `test/support/entry.jsx` | 31 | Re-exports the internals the specs drive. Not published. |
 | `README.md` / `README.zh-CN.md` | 254 / 216 | User-facing: features, install (3 paths), platform support matrix, how the numbers are produced, configuration. |
@@ -146,11 +154,29 @@ Response:
       "projectBytes": 123 | null, "projectEntries": 0, "projectTruncated": false,
       "droppedDirCount": 0, "status": "idle" | "scanning" | "done" | "hidden", "warnings": []
     },
+    "temperature": {
+      "status": "ready" | "unavailable" | "hidden",
+      "at": 1700000000000 | null,
+      "source": "windows-cim" | "hwmon" | "sysctl" | "powermetrics" | … | null,
+      "groups": {
+        "cpu" | "gpu" | "mainboard" | "disk":
+          { "celsius", "min", "max", "count", "sensors": [{ "label", "celsius" }] } | null
+      },
+      "warnings": []
+    },
     "processes": [{ "pid", "name", "state", "threads", "rssBytes", "memPercent", "cpuPercent" }],
     "processCount": 0, "sort": "cpu", "warnings": [], "reader": "linux", "refreshIntervalMs": 2000
   }
 }
 ```
+
+`temperature.groups` is `null` per unanswered component, never a zero: a machine
+with no readable CPU sensor says so (`temperature-cpu-unavailable`) rather than
+borrowing the ACPI zone's figure. The reading is cached for
+`temperatureIntervalMs` (15s default) independently of the metrics poll, because a
+temperature is absolute (nothing to difference) and on Windows it costs a
+PowerShell call of a second or more. `status: "hidden"` comes from
+`temperature: false` in the config.
 
 `disk.projectBytes` sums the last scan's measured folders; `null` means none
 answered, never zero. **The scan is manual**: the panel sends `measure: true`
@@ -187,6 +213,7 @@ the reader could not read it at all.
 | Processes | `/proc/<pid>/stat`, in-process | `ps -Ao pid=,state=,time=,rss=,comm=` | one `Get-Process` call |
 | Process state | yes | yes | **no** (`—`) |
 | Thread count | yes | **no** (no portable BSD `ps` keyword) | yes |
+| Temperatures | `hwmon`, else `thermal` | `powermetrics` (root) / `osx-cpu-temp` / `istats` | monitor WMI, ACPI zone, storage counters, `nvidia-smi` |
 | Reads `/proc` only | yes | spawns 1–2 helpers/sample | spawns 1 helper/sample |
 
 Default refresh is platform-aware because of that cost: 2s Linux, 3s macOS, 4s
@@ -201,7 +228,7 @@ Windows. `refreshIntervalMs` overrides it.
 # react-test-renderer instead of a DOM.
 npm run build         # lib/index.js + client/client.js
 npm run watch         # rebuild on change
-npm test              # build both halves, build the test bundle, run all 51 specs
+npm test              # build both halves, build the test bundle, run all specs
 npm run test:unit     # specs only, against the existing build
 ```
 
@@ -347,15 +374,52 @@ Read this section before editing. Every item below was an actual failure.
     not name the package either. The contract suite asserts every injected
     package ships a client module.
 
+16. **Windows has no usable CPU temperature, and the ACPI zone is not it.**
+    `MSAcpi_ThermalZoneTemperature` is a *motherboard* sensor by ACPI's own
+    definition, and on many desktop boards it is a near-constant placeholder —
+    measured here at a fixed **27.9 °C through a full-core burn** (8 busy workers,
+    45 s, sampled every 3 s: `3010` tenths-Kelvin, unchanged). Publishing it as the
+    CPU temperature would produce a confident number that never moves, which is
+    worse than a dash. The only unprivileged source for real CPU temperature is a
+    running hardware monitor (LibreHardwareMonitor / OpenHardwareMonitor), whose
+    WMI `Sensor` class carries an identifier path (`/intelcpu/0/temperature/0`)
+    that names the hardware — so bucket by *identifier*, never by the localised,
+    user-editable display name. Without a monitor the CPU tile is a dash with
+    `temperature-cpu-unavailable`, and that is correct.
+
+17. **Bucketing by display name has an ordering trap.** "GPU Core" contains
+    "core", so a CPU rule tested first claims every graphics sensor in the
+    machine. Match `gpu` before `cpu` in any name-based fallback (the identifier
+    path is checked first and does not have this problem). A `/ram/` sensor from a
+    hardware monitor belongs to no tile this card draws and must stay `other`
+    rather than being forced into one.
+
+18. **`Number(null) === 0` bites temperature too.** The ACPI zone is in tenths of
+    a Kelvin, so a missing `CurrentTemperature` coerced with `Number()` converts
+    to a confident **-273.15 °C**. Every raw counter is required to be a real
+    number before conversion. Likewise a drive whose reliability counter answers
+    `0` is reporting "no sensor", not a freezing drive — treat `<= 0` as absent.
+
+19. **A temperature read on Windows costs ~1.6–2.8 s, so it cannot ride the
+    metrics poll.** `Get-StorageReliabilityCounter` dominates (a bare
+    `Get-PhysicalDisk` loop measured ~2.7 s; the full script ~1.6 s warm). Hence
+    the separate probe with its own cache: serve a cached reading instantly, await
+    only the *first* read (so the panel's first paint carries a number), and
+    refresh a stale reading *behind* the poll. On Linux the same source costs
+    milliseconds, which is why the cadence is configurable rather than fixed.
+
 ## Open work
 
 | Item | State |
 | --- | --- |
 | **Community-list PR** | Not submitted. `contrib/submit-pr.sh` does it in one command and refuses until the repository is 24h old — created `2026-09-29T07:51:27Z`, so eligible from **`2026-09-30T07:51:27Z`** (Beijing 15:51). The entry file is ready; do **not** hand-add an `npm:` key to it, npm↔repo mapping is collected automatically and a hand-written key is rejected. |
 | **npm trusted publishing** | The workflow is written but the npm-side setting is **not configured**, so a tag push currently fails at the publish step. One-time: npmjs.com → package → Settings → Trusted Publisher → GitHub Actions → repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank. Details in `RELEASING.md`. |
-| **macOS and Windows on real hardware** | **Untested by the author.** Covered by parser specs over captured tool output and by injected failure paths, but never run on those systems. If a field is wrong there, the panel's `warnings` list names it. Lifting this is the single most valuable next step. |
+| **macOS and Windows on real hardware** | **Windows temperature sources were exercised on real hardware in 0.4.0** (which is where traps 16–19 come from). The *metrics* readers for macOS and Windows remain untested by the author: covered by parser specs over captured tool output and by injected failure paths, never run on those systems. If a field is wrong there, the panel's `warnings` list names it. Lifting this is the single most valuable next step. |
+| **macOS temperature** | Implemented but **not run on a Mac** — `powermetrics` needs root and the two community helpers need installing, so the parser specs are all the coverage there is. A Mac user with `osx-cpu-temp` installed is the fastest way to confirm it. |
 | **pm2-managed web service** | The real GUI runs under pm2 as `deepseek-harness-webui`; host-half changes need a `pm2 restart` of it (schedule detached, see trap 5), never an inline restart during a turn. A throwaway `dsh --profile web --port 3099 --no-open` instance (via `setsid nohup … & disown`, so it survives the turn) is the way to verify the route without touching pm2. |
 | No history / sparklines | The panel shows the present reading only. |
+| No fan speeds, voltages, or per-sensor temperature table | A component's tile shows its hottest sensor and the tooltip names every sensor; there is no chart or separate table for them. |
+| Windows CPU temperature needs a hardware monitor | Not an omission: without LibreHardwareMonitor / OpenHardwareMonitor running there is no unprivileged source. The tile says so. |
 | No per-process user, command line or tree view | Rows carry name, PID, state, threads, CPU, RSS. |
 | Polling, not streaming | One request per interval; a push channel would need the Gateway. |
 | Windows process state, macOS thread count | Unavailable by platform, not by omission. |
@@ -377,13 +441,26 @@ Read this section before editing. Every item below was an actual failure.
 
 ## Definition of done for a change
 
-1. `npm test` green (it rebuilds first).
+1. `npm test` green (it rebuilds first). **On Windows this is not green out of the
+   box**: 17 specs in `du.test.mjs` / `metrics.test.mjs` fail on path-separator
+   expectations (`resolvePath('/explicit')` → `E:\explicit`), and the 6 contract
+   specs need `DSH_CLI_ROOT` pointing at the installed `@deepseek-ai/dsh`. Establish
+   the baseline before your change (`git stash`, run, compare counts) so you can
+   tell your failures from the pre-existing ones. With
+   `DSH_CLI_ROOT=%APPDATA%\npm\node_modules\@deepseek-ai\dsh` set, the suite is
+   127 tests / 110 pass / 17 pre-existing failures, and the contract specs pass.
 2. A new spec covers the behaviour, ideally one that fails without the fix.
 3. If the browser half changed, verified in a real browser via
    `scripts/verify-ui.mjs` — screenshots caught two layout bugs that specs could
-   not.
+   not. An isolated profile is the way to do that without touching the running
+   GUI: copy `~/.dsh/profiles/web` to `~/.dsh/profiles/<name>`, drop this
+   repository's `lib/`, `client/`, `locale/`, `package.json` and
+   `cordis.patch.yml` over the installed package inside its `node_modules`, boot
+   `dsh --profile <name> --port 3099 --no-open`, then delete the copy. The token
+   URL is printed on stdout, so redirect the boot to a file to read it.
 4. If the host half changed, verified against the running service (route returns the
-   expected fields).
+   expected fields). The route needs the browser-session cookie, not just the
+   token: load `/?token=<token>` first with a cookie jar, then POST.
 5. Version bumped, `CHANGELOG.md` section added, screenshots refreshed if visible
    output changed.
 6. Committed and pushed; the working tree left clean.
