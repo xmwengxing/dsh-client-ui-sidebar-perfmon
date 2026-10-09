@@ -21,7 +21,8 @@ button.
 | Source version | **0.4.0** |
 | Published on npm | 0.2.0, 0.2.2, 0.3.1, **0.3.2, 0.4.0** — public, zero runtime dependencies |
 | GitHub Releases | v0.1.0 … v0.3.1, **v0.4.0** (latest; carries the version-free tarball) |
-| Tests | 128 specs across 7 files; 38 of them added in 0.4.0 |
+| Tests | 128 specs across 7 files, green on Windows (125 pass / 3 linux-only skips) and Linux (128 pass); 38 added in 0.4.0 |
+| Community list | [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984) — submitted, both checks green, awaiting a maintainer read |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
 
@@ -419,6 +420,21 @@ Read this section before editing. Every item below was an actual failure.
     this machine reproduces the CI condition (`test -d /sys/class/hwmon`) without
     needing node, which is the cheapest way to check such a branch.
 
+20b. **The mirror image: a spec that asserts one platform's semantics on the
+    other.** 17 specs in `du.test.mjs` / `metrics.test.mjs` compared the raw
+    POSIX literals they passed in (`/p`, `/elsewhere`) against values the code
+    had run through `path.resolve` — which is `E:\p` on Windows. The scanner was
+    correct; the expectations were host-shaped. This is the same defect as trap
+    20 seen from the other side, and it hid for the same reason: the suite was
+    green on Linux (where CI runs) and red on Windows (where the author works),
+    so it read as "known Windows noise" and was ignored. **A red suite on the
+    machine you develop on is not noise.** Route expectations through the same
+    resolver the code uses, and normalize separators in injected fakes. Verify a
+    path-sensitive change on *both*: WSL Ubuntu plus a Linux `node` tarball
+    (`nodejs.org/dist/vXX/node-vXX-linux-x64.tar.xz`, unpacked beside the
+    checkout) runs the real POSIX suite, and `DSH_CLI_ROOT` can point at the
+    Windows dsh install from inside WSL so the contract specs resolve too.
+
 21. **A trusted publisher's `Allowed actions` gates direct publishing.** The npm
     page has `Allow npm publish` and `Allow npm dist-tag` checkboxes, and the note
     above them says *"npm **stage** publish is always allowed"* — so a workflow
@@ -435,7 +451,8 @@ Read this section before editing. Every item below was an actual failure.
 
 | Item | State |
 | --- | --- |
-| **Community-list PR** | Not submitted. `contrib/submit-pr.sh` does it in one command and refuses until the repository is 24h old — created `2026-09-29T07:51:27Z`, so eligible from **`2026-09-30T07:51:27Z`** (Beijing 15:51). The entry file is ready; do **not** hand-add an `npm:` key to it, npm↔repo mapping is collected automatically and a hand-written key is rejected. |
+| **Community-list PR** | **Submitted — [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984)**, open and `mergeable_state: clean`. Both checks pass: `PR check` (shape, READMEs, awesome-lint, site build) and `Submission gate` ("All 1 submitted entry passes: `dsh.bundle` declared, repo old enough, enough commits"). Waiting on a maintainer's read, which the guide says is the actual decision. Notes: `gh` is not installed here, so the PR went through the API after `git clone --depth 1` of the fork — `contrib/submit-pr.sh` is still the one-command path wherever `gh` exists. Do **not** hand-add an `npm:` key to the entry; npm↔repo mapping is collected automatically and a hand-written key is rejected. The fork was synced first (`merge-upstream`), which matters because a stale fork re-adds old entries. |
+| **npm trusted publishing** | **Working as of v0.4.0** — the first release to actually exercise OIDC (earlier runs either failed earlier or short-circuited on "already on npm"). Two things had to be true: the npm trusted publisher configured (repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank) **and `Allow npm publish` ticked** under Allowed actions — the missing tick was the 403 (trap 21). 0.4.0 published with a provenance attestation, and its Release carries the version-free tarball. |
 | **npm trusted publishing** | **Working as of v0.4.0** — the first release to actually exercise OIDC (earlier runs either failed earlier or short-circuited on "already on npm"). Two things had to be true: the npm trusted publisher configured (repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank) **and `Allow npm publish` ticked** under Allowed actions — the missing tick was the 403 (trap 21). 0.4.0 published with a provenance attestation, and its Release carries the version-free tarball. |
 | **macOS and Windows on real hardware** | **Windows temperature sources were exercised on real hardware in 0.4.0** (which is where traps 16–19 come from). The *metrics* readers for macOS and Windows remain untested by the author: covered by parser specs over captured tool output and by injected failure paths, never run on those systems. If a field is wrong there, the panel's `warnings` list names it. Lifting this is the single most valuable next step. |
 | **macOS temperature** | Implemented but **not run on a Mac** — `powermetrics` needs root and the two community helpers need installing, so the parser specs are all the coverage there is. A Mac user with `osx-cpu-temp` installed is the fastest way to confirm it. |
@@ -464,15 +481,15 @@ Read this section before editing. Every item below was an actual failure.
 
 ## Definition of done for a change
 
-1. `npm test` green (it rebuilds first). **On Windows this is not green out of the
-   box**: 17 specs in `du.test.mjs` / `metrics.test.mjs` fail on path-separator
-   expectations (`resolvePath('/explicit')` → `E:\explicit`), and the 6 contract
-   specs need `DSH_CLI_ROOT` pointing at the installed `@deepseek-ai/dsh`. Establish
-   the baseline before your change (`git stash`, run, compare counts) so you can
-   tell your failures from the pre-existing ones. With
-   `DSH_CLI_ROOT=%APPDATA%\npm\node_modules\@deepseek-ai\dsh` set, the suite is
-   128 tests / 108 pass / 17 pre-existing failures / 3 skipped (the skips are the
-   `process.platform !== 'linux'` guards), and the contract specs pass.
+1. `npm test` green (it rebuilds first). Two environment facts, both now handled:
+   the 6 contract specs need `DSH_CLI_ROOT` pointing at the installed
+   `@deepseek-ai/dsh` (set it to
+   `%APPDATA%\npm\node_modules\@deepseek-ai\dsh`), and the suite is **green on
+   both platforms** — Windows: 128 tests / 125 pass / 0 fail / 3 skipped (the
+   skips are the `process.platform !== 'linux'` guards); Linux: 128 / 128 / 0 / 0.
+   It used to be red on Windows by default (17 path-separator failures), which
+   made a real regression indistinguishable from known noise; that is fixed, so a
+   red run now means something.
 2. A new spec covers the behaviour, ideally one that fails without the fix.
 3. If the browser half changed, verified in a real browser via
    `scripts/verify-ui.mjs` — screenshots caught two layout bugs that specs could
