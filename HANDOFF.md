@@ -19,9 +19,9 @@ button.
 | Repository | https://github.com/xmwengxing/dsh-client-ui-sidebar-perfmon |
 | Target | `dsh` **0.2.0-rc.1**, Node 24, npm 11, pnpm 12 |
 | Source version | **0.4.0** |
-| Published on npm | 0.2.0, 0.2.2 — public, zero runtime dependencies |
-| GitHub Releases | v0.1.0, v0.2.0, v0.2.1, v0.2.2 (latest published) |
-| Tests | 127 specs across 7 files; 38 of them new in 0.4.0 |
+| Published on npm | 0.2.0, 0.2.2, 0.3.1, **0.3.2, 0.4.0** — public, zero runtime dependencies |
+| GitHub Releases | v0.1.0 … v0.3.1, **v0.4.0** (latest; carries the version-free tarball) |
+| Tests | 128 specs across 7 files; 38 of them added in 0.4.0 |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
 
@@ -408,12 +408,35 @@ Read this section before editing. Every item below was an actual failure.
     refresh a stale reading *behind* the poll. On Linux the same source costs
     milliseconds, which is why the cadence is configurable rather than fixed.
 
+20. **A spec that reads the real machine passes locally and fails in CI.** The
+    generic temperature source probes `/sys/class/hwmon` before falling back to
+    `sysctl`, and a spec asserted the *fallback* while letting the probe read the
+    host. `/sys/class/hwmon` is absent on the Windows development machine and
+    present on the Ubuntu runner, so the suite was green locally and failed the
+    0.4.0 release with `'hwmon' !== 'sysctl'`. Anything host-shaped — a `/sys`
+    tree, `/proc`, an installed tool — is an injection point, and the spec pins
+    it. `createGenericTemperature({ hwmonRoot })` is that seam; the WSL Ubuntu on
+    this machine reproduces the CI condition (`test -d /sys/class/hwmon`) without
+    needing node, which is the cheapest way to check such a branch.
+
+21. **A trusted publisher's `Allowed actions` gates direct publishing.** The npm
+    page has `Allow npm publish` and `Allow npm dist-tag` checkboxes, and the note
+    above them says *"npm **stage** publish is always allowed"* — so a workflow
+    that runs `npm publish` is refused with `OIDC permission denied for this
+    action` while `npm stage publish` would have been fine. This is a **missing
+    tick, not a wrong field**, and the yellow "cannot be changed" banner applies
+    only to Publisher/Organization/Repository/Workflow/Environment, not to these
+    two boxes. Note also that a run which logs *"already on npm; skipping the
+    publish step"* reports **success without ever exercising OIDC** — v0.3.1
+    looked like proof the setup worked, and it was not. Only a run that logs
+    `+ <name>@<version>` has really published.
+
 ## Open work
 
 | Item | State |
 | --- | --- |
 | **Community-list PR** | Not submitted. `contrib/submit-pr.sh` does it in one command and refuses until the repository is 24h old — created `2026-09-29T07:51:27Z`, so eligible from **`2026-09-30T07:51:27Z`** (Beijing 15:51). The entry file is ready; do **not** hand-add an `npm:` key to it, npm↔repo mapping is collected automatically and a hand-written key is rejected. |
-| **npm trusted publishing** | The workflow is written but the npm-side setting is **not configured**, so a tag push currently fails at the publish step. One-time: npmjs.com → package → Settings → Trusted Publisher → GitHub Actions → repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank. Details in `RELEASING.md`. |
+| **npm trusted publishing** | **Working as of v0.4.0** — the first release to actually exercise OIDC (earlier runs either failed earlier or short-circuited on "already on npm"). Two things had to be true: the npm trusted publisher configured (repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank) **and `Allow npm publish` ticked** under Allowed actions — the missing tick was the 403 (trap 21). 0.4.0 published with a provenance attestation, and its Release carries the version-free tarball. |
 | **macOS and Windows on real hardware** | **Windows temperature sources were exercised on real hardware in 0.4.0** (which is where traps 16–19 come from). The *metrics* readers for macOS and Windows remain untested by the author: covered by parser specs over captured tool output and by injected failure paths, never run on those systems. If a field is wrong there, the panel's `warnings` list names it. Lifting this is the single most valuable next step. |
 | **macOS temperature** | Implemented but **not run on a Mac** — `powermetrics` needs root and the two community helpers need installing, so the parser specs are all the coverage there is. A Mac user with `osx-cpu-temp` installed is the fastest way to confirm it. |
 | **pm2-managed web service** | The real GUI runs under pm2 as `deepseek-harness-webui`; host-half changes need a `pm2 restart` of it (schedule detached, see trap 5), never an inline restart during a turn. A throwaway `dsh --profile web --port 3099 --no-open` instance (via `setsid nohup … & disown`, so it survives the turn) is the way to verify the route without touching pm2. |
@@ -448,7 +471,8 @@ Read this section before editing. Every item below was an actual failure.
    the baseline before your change (`git stash`, run, compare counts) so you can
    tell your failures from the pre-existing ones. With
    `DSH_CLI_ROOT=%APPDATA%\npm\node_modules\@deepseek-ai\dsh` set, the suite is
-   127 tests / 110 pass / 17 pre-existing failures, and the contract specs pass.
+   128 tests / 108 pass / 17 pre-existing failures / 3 skipped (the skips are the
+   `process.platform !== 'linux'` guards), and the contract specs pass.
 2. A new spec covers the behaviour, ideally one that fails without the fix.
 3. If the browser half changed, verified in a real browser via
    `scripts/verify-ui.mjs` — screenshots caught two layout bugs that specs could
