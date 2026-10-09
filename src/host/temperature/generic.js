@@ -39,18 +39,25 @@ export function parseSysctlTemperatures(text) {
 
 /**
  * Build the generic temperature source.
+ *
+ * Both probes are injectable, and that is not decoration: whether this platform
+ * has a Linux-compatible hwmon tree is a property of the *host*, so a spec that
+ * did not pin the tree would pass on a machine without `/sys` and fail on one
+ * with it. The `hwmonRoot` seam is what makes the fallback order testable.
  * @param {string} platform - the `process.platform` this source stands in for.
- * @param {{run?: (command: string, args: string[], options?: object) => Promise<string>}} [options] - injection seam.
+ * @param {{run?: (command: string, args: string[], options?: object) => Promise<string>,
+ *          hwmonRoot?: string}} [options] - injection seam.
  * @returns {object} the source.
  */
 export function createGenericTemperature(platform, options = {}) {
   const run = options.run ?? runCommand
+  const hwmonRoot = options.hwmonRoot
 
   return {
     id: 'generic',
     async read() {
       // A Linux-compatible hwmon tree, when the platform exposes one.
-      const hwmon = await readHwmon()
+      const hwmon = hwmonRoot === undefined ? await readHwmon() : await readHwmon(hwmonRoot)
       if (hwmon.length > 0) return { sensors: hwmon, source: 'hwmon', warnings: [] }
       // Otherwise the platform's own sysctl, which on FreeBSD carries CPU temps.
       try {

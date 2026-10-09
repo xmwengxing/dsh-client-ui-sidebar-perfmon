@@ -332,24 +332,51 @@ test('the macOS source falls through to a helper that does answer', async () => 
 
 // ---------------------------------------------------------------- generic
 
-test('a generic platform reads FreeBSD sysctl temperatures, or says unavailable', async () => {
+test('a generic platform reads FreeBSD sysctl temperatures, or says unavailable', async (context) => {
   const text = ['dev.cpu.0.temperature: 45.0C', 'dev.cpu.1.temperature: 46.5C', 'kern.ostype: FreeBSD'].join('\n')
   const sensors = parseSysctlTemperatures(text)
   assert.equal(sensors.length, 2)
   assert.deepEqual(sensors[0], { id: 'sysctl:dev.cpu.0.temperature', kind: 'cpu', label: 'cpu0', celsius: 45 })
 
+  // The hwmon tree is pinned to an empty directory on purpose. Whether this
+  // platform exposes /sys/class/hwmon is a property of the *host*: reading the
+  // real one made this spec pass on a machine without /sys and fail on a CI
+  // runner that has it, which is exactly the flake the seam exists to remove.
+  const noHwmon = await mkdtemp(join(tmpdir(), 'perfmon-nohwmon-'))
+  context.after(() => rm(noHwmon, { recursive: true, force: true }))
+
   const run = fakeRunner({ sysctl: text })
-  const source = createGenericTemperature('freebsd', { run })
+  const source = createGenericTemperature('freebsd', { run, hwmonRoot: noHwmon })
   const result = await source.read()
   assert.equal(result.source, 'sysctl')
   assert.equal(result.sensors.length, 2)
 
   // No hwmon tree and no sysctl answer: unavailable, with the platform named.
-  const bare = createGenericTemperature('sunos', { run: fakeRunner({}) })
+  const bare = createGenericTemperature('sunos', { run: fakeRunner({}), hwmonRoot: noHwmon })
   const empty = await bare.read()
   assert.deepEqual(empty.sensors, [])
   assert.equal(empty.source, null)
   assert.ok(empty.warnings[0].startsWith('temperature-unavailable'))
+})
+
+test('a generic platform prefers its hwmon tree over sysctl', async (context) => {
+  // The branch the CI runner exercised: a Linux-compatible hwmon tree wins, and
+  // sysctl is never consulted — so a platform that has both is not read twice.
+  const root = await mkdtemp(join(tmpdir(), 'perfmon-generic-hwmon-'))
+  context.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'hwmon0'))
+  await writeFile(join(root, 'hwmon0', 'name'), 'k10temp\n')
+  await writeFile(join(root, 'hwmon0', 'temp1_input'), '51000\n')
+
+  let sysctlCalls = 0
+  const run = async () => {
+    sysctlCalls += 1
+    return 'dev.cpu.0.temperature: 99.0C'
+  }
+  const result = await createGenericTemperature('freebsd', { run, hwmonRoot: root }).read()
+  assert.equal(result.source, 'hwmon')
+  assert.equal(result.sensors[0].celsius, 51)
+  assert.equal(sysctlCalls, 0, 'the fallback must not run when hwmon answered')
 })
 
 // ---------------------------------------------------------------- aggregation
