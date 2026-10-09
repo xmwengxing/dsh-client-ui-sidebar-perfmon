@@ -21,7 +21,7 @@ button.
 | Source version | **0.4.1** |
 | Published on npm | 0.2.0, 0.2.2, 0.3.1, 0.3.2, 0.4.0 — public, zero runtime dependencies |
 | GitHub Releases | v0.1.0 … v0.4.0 (latest; carries the version-free tarball) |
-| Tests | 129 specs across 7 files, green on Windows (126 pass / 3 linux-only skips) and Linux (129 pass) |
+| Tests | 130 specs across 7 files, green on Windows (127 pass / 3 linux-only skips) and Linux (130 pass) |
 | Community list | [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984) — submitted, both checks green, awaiting a maintainer read |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
@@ -375,42 +375,64 @@ Read this section before editing. Every item below was an actual failure.
     not name the package either. The contract suite asserts every injected
     package ships a client module.
 
-16. **Windows has no usable CPU temperature, and the ACPI zone is not it.**
+16. **Windows has no usable CPU temperature without a hardware monitor — and the
+    monitor's version decides whether ours works at all.**
     `MSAcpi_ThermalZoneTemperature` is a *motherboard* sensor by ACPI's own
     definition, and on many desktop boards it is a near-constant placeholder.
-    Measured twice on this machine (MSI B660M + i7-12700F, no hardware monitor
-    installed): a fixed `3010` tenths-Kelvin — **27.85 °C** — while ~105 s of CPU
-    time burned in a 15 s window across the burners, and unchanged after the load
-    stopped. Publishing that as the CPU temperature would be a confident number
-    that never moves, which is worse than a dash. Two cautions for anyone
-    re-measuring: the `Win32_PerfFormattedData_PerfOS_Processor` counter is not a
-    reliable saturation check while WMI itself competes for CPU (it read 24–35 %
-    during a genuinely loaded test), so compare `Get-Process … CPU` deltas against
-    wall time instead; and a burner spawned through `Start-Job` or with a bad
-    working directory can fail silently, which reads as "no load" and makes the
-    whole experiment worthless. The only unprivileged source for real CPU
-    temperature is a running hardware monitor (LibreHardwareMonitor /
-    OpenHardwareMonitor, installable via `winget install
-    LibreHardwareMonitor.LibreHardwareMonitor`), whose WMI `Sensor` class carries
-    an identifier path (`/intelcpu/0/temperature/0`) that names the hardware — so
-    bucket by *identifier*, never by the localised, user-editable display name.
-    Without a monitor the CPU tile is a dash with `temperature-cpu-unavailable`,
-    and that is correct.
+    Measured twice on this machine (MSI B660M + i7-12700F): a fixed `3010`
+    tenths-Kelvin — **27.85 °C** — while ~105 s of CPU time burned in a 15 s
+    window across the burners, and unchanged after the load stopped. Publishing
+    that as the CPU temperature would be a confident number that never moves,
+    which is worse than a dash. Two cautions for anyone re-measuring: the
+    `Win32_PerfFormattedData_PerfOS_Processor` counter is not a reliable
+    saturation check while WMI itself competes for CPU (it read 24–35 % during a
+    genuinely loaded test), so compare `Get-Process … CPU` deltas against wall
+    time instead; and a burner spawned through `Start-Job` or with a bad working
+    directory can fail silently, which reads as "no load" and makes the whole
+    experiment worthless.
+    **`winget install LibreHardwareMonitor.LibreHardwareMonitor` now installs
+    0.9.6, which no longer ships a WMI provider.** Its PawnIO dependency installs,
+    then the LHM step fails on a missing nested installer — and even unzipped by
+    hand, 0.9.6 exposes **no `root/LibreHardwareMonitor` namespace**: `WmiProvider`
+    is absent from both its exe and its lib, and it has no `System.Management`
+    dependency. **Install 0.9.4 instead** — unzip `LibreHardwareMonitor-net472.zip`
+    into `C:\Program Files\LibreHardwareMonitor` (it is portable; there is no
+    installer), and run it **as administrator** or its WMI provider will not
+    appear. Verify a build before trusting it by searching the **exe** for
+    `WmiProvider`: that is where OpenHardwareMonitor's provider lives, so
+    searching only the lib reports a false negative (an hour lost to exactly
+    that). 0.9.4 publishes 206 sensors here. Its `Sensor` class carries an
+    identifier path (`/intelcpu/0/temperature/0`) that names the hardware — bucket
+    by *identifier*, never by the localised, user-editable display name. Without a
+    monitor the CPU tile is a dash with `temperature-cpu-unavailable`, and that is
+    correct.
 
-17. **Bucketing by display name has an ordering trap.** "GPU Core" contains
+17. **Intel's `Distance to TjMax` is headroom, not a temperature — and counting it
+    inverts the reading.** LibreHardwareMonitor types it as `Temperature`, but it
+    is `TjMax - actual`, so a 41 °C core with a 100 °C TjMax reports 59. Measured
+    here: the headroom sensors ran 60–64 while the cores ran 37–43. Because a
+    tile's headline is its **hottest** sensor, including headroom made the panel
+    show 64 °C for a CPU whose hottest core was 43 °C — and a machine working
+    *harder* would have displayed a *lower* number. `isTemperatureReading` filters
+    it by name. The lesson generalises: a hardware monitor's sensor *type* is not a
+    guarantee of what the number *means*, and this class of bug is invisible to
+    parser specs written from documentation — it took installing the monitor and
+    comparing its raw sensors against the panel.
+
+18. **Bucketing by display name has an ordering trap.** "GPU Core" contains
     "core", so a CPU rule tested first claims every graphics sensor in the
     machine. Match `gpu` before `cpu` in any name-based fallback (the identifier
     path is checked first and does not have this problem). A `/ram/` sensor from a
     hardware monitor belongs to no tile this card draws and must stay `other`
     rather than being forced into one.
 
-18. **`Number(null) === 0` bites temperature too.** The ACPI zone is in tenths of
+19. **`Number(null) === 0` bites temperature too.** The ACPI zone is in tenths of
     a Kelvin, so a missing `CurrentTemperature` coerced with `Number()` converts
     to a confident **-273.15 °C**. Every raw counter is required to be a real
     number before conversion. Likewise a drive whose reliability counter answers
     `0` is reporting "no sensor", not a freezing drive — treat `<= 0` as absent.
 
-19. **A temperature read on Windows costs ~1.6–2.8 s, so it cannot ride the
+20. **A temperature read on Windows costs ~1.6–2.8 s, so it cannot ride the
     metrics poll.** `Get-StorageReliabilityCounter` dominates (a bare
     `Get-PhysicalDisk` loop measured ~2.7 s; the full script ~1.6 s warm). Hence
     the separate probe with its own cache: serve a cached reading instantly, await
@@ -418,7 +440,7 @@ Read this section before editing. Every item below was an actual failure.
     refresh a stale reading *behind* the poll. On Linux the same source costs
     milliseconds, which is why the cadence is configurable rather than fixed.
 
-20. **A spec that reads the real machine passes locally and fails in CI.** The
+21. **A spec that reads the real machine passes locally and fails in CI.** The
     generic temperature source probes `/sys/class/hwmon` before falling back to
     `sysctl`, and a spec asserted the *fallback* while letting the probe read the
     host. `/sys/class/hwmon` is absent on the Windows development machine and
@@ -429,7 +451,7 @@ Read this section before editing. Every item below was an actual failure.
     this machine reproduces the CI condition (`test -d /sys/class/hwmon`) without
     needing node, which is the cheapest way to check such a branch.
 
-20b. **The mirror image: a spec that asserts one platform's semantics on the
+21b. **The mirror image: a spec that asserts one platform's semantics on the
     other.** 17 specs in `du.test.mjs` / `metrics.test.mjs` compared the raw
     POSIX literals they passed in (`/p`, `/elsewhere`) against values the code
     had run through `path.resolve` — which is `E:\p` on Windows. The scanner was
@@ -444,7 +466,7 @@ Read this section before editing. Every item below was an actual failure.
     checkout) runs the real POSIX suite, and `DSH_CLI_ROOT` can point at the
     Windows dsh install from inside WSL so the contract specs resolve too.
 
-21. **A trusted publisher's `Allowed actions` gates direct publishing.** The npm
+22. **A trusted publisher's `Allowed actions` gates direct publishing.** The npm
     page has `Allow npm publish` and `Allow npm dist-tag` checkboxes, and the note
     above them says *"npm **stage** publish is always allowed"* — so a workflow
     that runs `npm publish` is refused with `OIDC permission denied for this
@@ -461,14 +483,14 @@ Read this section before editing. Every item below was an actual failure.
 | Item | State |
 | --- | --- |
 | **Community-list PR** | **Submitted — [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984)**, open and `mergeable_state: clean`. Both checks pass: `PR check` (shape, READMEs, awesome-lint, site build) and `Submission gate` ("All 1 submitted entry passes: `dsh.bundle` declared, repo old enough, enough commits"). Waiting on a maintainer's read, which the guide says is the actual decision. Notes: `gh` is not installed here, so the PR went through the API after `git clone --depth 1` of the fork — `contrib/submit-pr.sh` is still the one-command path wherever `gh` exists. Do **not** hand-add an `npm:` key to the entry; npm↔repo mapping is collected automatically and a hand-written key is rejected. The fork was synced first (`merge-upstream`), which matters because a stale fork re-adds old entries. |
-| **npm trusted publishing** | **Working as of v0.4.0** — the first release to actually exercise OIDC (earlier runs either failed earlier or short-circuited on "already on npm"). Two things had to be true: the npm trusted publisher configured (repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank) **and `Allow npm publish` ticked** under Allowed actions — the missing tick was the 403 (trap 21). 0.4.0 published with a provenance attestation, and its Release carries the version-free tarball. |
+| **npm trusted publishing** | **Working as of v0.4.0** — the first release to actually exercise OIDC (earlier runs either failed earlier or short-circuited on "already on npm"). Two things had to be true: the npm trusted publisher configured (repository `xmwengxing/dsh-client-ui-sidebar-perfmon`, workflow `publish.yml`, environment blank) **and `Allow npm publish` ticked** under Allowed actions — the missing tick was the 403 (trap 22). 0.4.0 published with a provenance attestation, and its Release carries the version-free tarball. |
 | **Local install for live verification** | The `web` profile currently points at this checkout (`dsh plugin --profile web add E:\Projects\dsh-client-ui-sidebar-perfmon` → a pnpm symlink), so a rebuild is picked up by a browser refresh with no reinstall. The market's npm build is backed up at `%TEMP%\perfmon-market-backup` (delete with `dsh plugin --profile web add @xmwengxing/dsh-client-ui-sidebar-perfmon` to go back). **The GUI on :3080 is a plain `dsh web` process, not pm2**, and an agent running inside it cannot restart it without killing its own session — verify on a throwaway `dsh --profile web --port 3099 --no-open` instance instead (redirect its stdout to a file to read the token URL). |
 | **macOS and Windows on real hardware** | **Windows temperature sources were exercised on real hardware in 0.4.0** (which is where traps 16–19 come from). The *metrics* readers for macOS and Windows remain untested by the author: covered by parser specs over captured tool output and by injected failure paths, never run on those systems. If a field is wrong there, the panel's `warnings` list names it. Lifting this is the single most valuable next step. |
 | **macOS temperature** | Implemented but **not run on a Mac** — `powermetrics` needs root and the two community helpers need installing, so the parser specs are all the coverage there is. A Mac user with `osx-cpu-temp` installed is the fastest way to confirm it. |
-| **pm2-managed web service** | The real GUI runs under pm2 as `deepseek-harness-webui`; host-half changes need a `pm2 restart` of it (schedule detached, see trap 5), never an inline restart during a turn. A throwaway `dsh --profile web --port 3099 --no-open` instance (via `setsid nohup … & disown`, so it survives the turn) is the way to verify the route without touching pm2. |
+| **The GUI host on :3080** | It is a plain `dsh web --no-open` process (PID varies), **not** pm2 — `pm2 list` is empty here, and an agent running inside it cannot restart it without killing its own turn (trap 5). Verify on a throwaway `dsh --profile web --port 3099 --no-open` instance instead (redirect its stdout to a file to read the token URL), and leave the user's instance alone. Host-half changes need the process restarted; client-half changes only need a browser refresh. |
 | No history / sparklines | The panel shows the present reading only. |
 | No fan speeds, voltages, or per-sensor temperature table | A component's tile shows its hottest sensor and the tooltip names every sensor; there is no chart or separate table for them. |
-| Windows CPU temperature needs a hardware monitor | Not an omission: without LibreHardwareMonitor / OpenHardwareMonitor running there is no unprivileged source. The tile says so. |
+| Windows CPU temperature needs a hardware monitor | Not an omission: without LibreHardwareMonitor / OpenHardwareMonitor running there is no unprivileged source. **Installed on this machine as of 0.4.1** — LibreHardwareMonitor **0.9.4** (not 0.9.6, which dropped WMI) at `C:\Program Files\LibreHardwareMonitor`, run as administrator, and the panel reads it with no configuration. See trap 16 for why the version matters. |
 | No per-process user, command line or tree view | Rows carry name, PID, state, threads, CPU, RSS. |
 | Polling, not streaming | One request per interval; a push channel would need the Gateway. |
 | Windows process state, macOS thread count | Unavailable by platform, not by omission. |

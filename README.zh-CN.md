@@ -212,7 +212,10 @@ session-query 服务读取冷记录的 cwd。扫描进行中按钮变为“停�
   看起来很确定的数字。
 - **Windows 上 CPU 温度需要硬件监控软件。** 没有运行 LibreHardwareMonitor 或
   OpenHardwareMonitor 时，普通权限下确实没有可用来源，因此 CPU 磁贴显示 `—`
-  并说明原因，而不是拿别的部件的读数顶替。
+  并说明原因，而不是拿别的部件的读数顶替。**请装 0.9.4，不要装最新版**——0.9.6
+  移除了本插件所读取的 WMI 提供程序。0.9.4 是免安装 zip（`LibreHardwareMonitor-net472.zip`），
+  解压后**以管理员身份**运行即可，面板会自动识别，无需任何配置。Intel 的
+  `Distance to TjMax` 是**热余量**而非温度，已被排除——若计入，CPU 越忙反而显示越低。
 - **macOS 上普通权限进程读不到 SMC。** `powermetrics` 需要 root；`osx-cpu-temp`
   与 `istats` 需要用户自行安装。三者都没有时，四个磁贴全是 `—`——这才是诚实的答案。
 
@@ -252,7 +255,7 @@ session-query 服务读取冷记录的 cwd。扫描进行中按钮变为“停�
 
 - **没有进程属主、命令行与进程树**。每行包含进程名、PID、状态、线程数、CPU 与 RSS。
 - **温度取决于平台暴露了什么**。Windows 的 CPU 温度需要运行硬件监控软件
-  （LibreHardwareMonitor 或 OpenHardwareMonitor）；macOS 需要以 root 运行
+  （LibreHardwareMonitor **0.9.4** 或 OpenHardwareMonitor，需以管理员身份运行）；macOS 需要以 root 运行
   `powermetrics` 或安装社区工具；读不到传感器的机器显示 `—` 并说明原因。
   各部件的确切来源见[温度](#温度)。
 - **磁贴里没有风扇转速、电压或逐核心温度明细**。每个部件的头条是它最高的那个传感器，

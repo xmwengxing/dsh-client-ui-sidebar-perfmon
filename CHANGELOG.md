@@ -2,6 +2,18 @@
 
 ## 0.4.1
 
+- **Fixed: the CPU temperature was wrong, and backwards.** With a hardware monitor
+  running, Intel CPUs report `CPU Core #N Distance to TjMax` — typed as a
+  temperature, but actually *headroom* (`TjMax - actual`, so a 41 °C core with a
+  100 °C TjMax reports 59). Because a tile's headline is its hottest sensor,
+  counting it made the panel show **64 °C for a CPU whose hottest core was 43 °C**,
+  and a machine working *harder* would have displayed a *lower* number. Headroom
+  sensors are now excluded; the tile equals the maximum of the real temperature
+  sensors exactly.
+- **CPU temperature now works on Windows with a hardware monitor**, confirmed end
+  to end on real hardware. Note that **LibreHardwareMonitor 0.9.6 dropped its WMI
+  provider**, so the namespace this plugin reads does not exist there; **0.9.4** is
+  the version to install (portable zip, run as administrator).
 - **The temperature tiles are two lines, not three.** The third line carried a
   sensor name or a spread that fits far better in the tooltip, and at three lines
   the card read as mostly whitespace. Each tile is now its reading and its
@@ -11,12 +23,6 @@
   where the reader is actually looking: a temperature tile's tooltip says why
   that tile is empty, and the footer carries the reading's other warnings as a
   tooltip, so "PowerShell is missing" is still discoverable.
-- **CPU temperature guidance is now actionable.** On a Windows desktop with no
-  hardware monitor there is genuinely no unprivileged source for it (measured
-  again on a 12-core i7-12700F: the ACPI thermal zone held 27.85 °C through
-  ~105 s of CPU time burned in 15 s, so it is a board-level placeholder and is
-  correctly never published as the CPU). The tile's tooltip now says to run a
-  hardware monitor and that the panel picks it up automatically.
 
 ## 0.4.0
 

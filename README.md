@@ -249,7 +249,12 @@ feature could easily have made:
 - **On Windows, CPU temperature needs a hardware monitor.** Without
   LibreHardwareMonitor or OpenHardwareMonitor running there is genuinely no
   unprivileged source for it, so the CPU tile is a `—` and the panel says why
-  rather than substituting another component's reading.
+  rather than substituting another component's reading. **Install 0.9.4**, not the
+  latest: 0.9.6 dropped the WMI provider this plugin reads. The 0.9.4 release is a
+  portable zip (`LibreHardwareMonitor-net472.zip`) — unzip it anywhere and run it
+  **as administrator**; the panel then picks it up with no configuration. Intel's
+  `Distance to TjMax` sensors are *headroom*, not temperature, and are excluded:
+  counting them would have shown a cooler number for a harder-working CPU.
 - **On macOS, an unprivileged process cannot read the SMC.** `powermetrics`
   requires root; `osx-cpu-temp` and `istats` must be installed by the user. With
   none of them, every tile is a `—` — which is the honest answer.
@@ -298,9 +303,9 @@ files. The route is protected by the same authentication as the rest of the GUI.
 - **No per-process user, command line, or tree view.** Rows carry the process
   name, PID, state, thread count, CPU and RSS.
 - **Temperatures depend on what the platform exposes.** Windows CPU temperature
-  needs a hardware monitor (LibreHardwareMonitor or OpenHardwareMonitor) running;
-  macOS needs `powermetrics` as root or a community helper; a machine with no
-  readable sensor shows dashes and says why. See
+  needs a hardware monitor (LibreHardwareMonitor **0.9.4** or OpenHardwareMonitor)
+  running as administrator; macOS needs `powermetrics` as root or a community
+  helper; a machine with no readable sensor shows dashes and says why. See
   [Temperatures](#temperatures) for the exact source per component.
 - **No fan speeds, voltages or per-core temperature detail in the tiles.** A
   component's headline is its hottest sensor; every sensor is named in the
