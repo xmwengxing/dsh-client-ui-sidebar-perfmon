@@ -87,13 +87,13 @@ Relative to the repository root.
 | `test/temperature.test.mjs` | 518 | Every temperature source's parsers and attribution rules, plus the probe's cache/staleness/in-flight behaviour. |
 | `test/du.test.mjs` | 284 | The scan controller: nothing starts implicitly, a stop lands between syscalls, the stored reading costs no filesystem work, budget/symlink/deduplication/drop rules, config resolution. |
 | `test/support/entry.jsx` | 31 | Re-exports the internals the specs drive. Not published. |
-| `README.md` / `README.zh-CN.md` | 254 / 216 | User-facing: features, install (3 paths), platform support matrix, how the numbers are produced, configuration. |
+| `README.md` / `README.zh-CN.md` | 214 / 185 | User-facing general intro: real panel screenshot (`assets/screenshot-panel.png`), features, install (3 paths), platform support matrix, how the numbers are produced, configuration. Deliberately no dev-process content (pm2, test suite, internals). |
 | `CHANGELOG.md` | 76 | Per-version notes. The release workflow extracts the matching section for GitHub Release notes. |
 | `RELEASING.md` | 62 | How a release happens, the one-time npm trusted-publisher setting, and why the alternatives are worse. |
 | `.github/workflows/publish.yml` | 94 | Tag-triggered: tests → OIDC publish with provenance → Release with the tarball. |
 | `contrib/awesome-dsh-plugin-entry.yml` | 18 | The community-list submission payload (one file in someone else's repo). |
 | `contrib/submit-pr.sh` | 92 | Does that submission: fork → add the entry → PR. Refuses before the list's 24h repo-age bar. |
-| `assets/screenshot-*.png`, `screenshots.json` | — | Storefront images, cropped so no conversation content ships. |
+| `assets/screenshot-*.png`, `screenshots.json` | — | `screenshot-panel.png` is the README hero (2× CDP capture, LHM running so CPU temp reads real); storefront images are cropped so no conversation content ships. |
 
 ## Architecture: the contracts that must not break
 
