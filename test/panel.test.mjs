@@ -202,7 +202,7 @@ test('the resource window shows one gauge each for CPU, memory and swap', async 
   assert.match(details[2], /1\.0 GB \/ 4\.0 GB/)
 })
 
-test('the resource card shows one compact GPU line below the project folder', async (context) => {
+test('the resource card shows one compact GPU line between the gauges and the project folder', async (context) => {
   const reading = readingFixture({
     disk: {
       projectDir: '/srv/demo',
@@ -224,10 +224,14 @@ test('the resource card shows one compact GPU line below the project folder', as
   assert.match(row.props.title, /NVIDIA RTX/)
   assert.match(row.props.title, /max 2000 MHz/)
   assert.match(row.props.title, /50%/)
+  // Order matters: the GPU line is a live machine reading and belongs with the
+  // gauges; the project-folder row is a manual on-demand measurement and is last.
   assert.deepEqual(
-    renderer.root.findAll((node) => node.props.className === 'dsh-perfmon-disk' || node.props.className === 'dsh-perfmon-gpuRow').map((node) => node.props.className),
-    ['dsh-perfmon-disk', 'dsh-perfmon-gpuRow'],
-    'the GPU line sits directly beneath the project-folder line',
+    renderer.root
+      .findAll((node) => node.props.className === 'dsh-perfmon-gauges' || node.props.className === 'dsh-perfmon-disk' || node.props.className === 'dsh-perfmon-gpuRow')
+      .map((node) => node.props.className),
+    ['dsh-perfmon-gauges', 'dsh-perfmon-gpuRow', 'dsh-perfmon-disk'],
+    'the GPU line sits directly beneath the gauges and above the project-folder line',
   )
 })
 

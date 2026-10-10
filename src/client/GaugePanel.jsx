@@ -302,12 +302,15 @@ export function GaugePanel(props) {
         title: swapDetail,
       }),
     ),
+    // The GPU line sits directly under the gauges and above the project-folder
+    // row: it is a live machine reading, like the gauges, whereas the folder row
+    // is a manual on-demand measurement and belongs last.
+    h(GpuPanel, { clock: gpuClock, vram: gpuVram, title: gpuTitle, hidden: gpuHidden, t }),
     h(DiskPanel, {
       disk: reading?.disk,
       warnings: reading?.warnings,
       measure: props.measure,
       t,
     }),
-    h(GpuPanel, { gpu, clock: gpuClock, vram: gpuVram, title: gpuTitle, hidden: gpu?.status === 'hidden', t }),
   )
 }
