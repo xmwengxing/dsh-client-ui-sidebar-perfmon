@@ -202,7 +202,14 @@ test('the resource window shows one gauge each for CPU, memory and swap', async 
   assert.match(details[2], /1\.0 GB \/ 4\.0 GB/)
 })
 
-test('the resource card shows one compact GPU line between the gauges and the project folder', async (context) => {
+/** The inline widths of the GPU bar's fills, in render order. */
+function gpuFillWidths(renderer) {
+  return renderer.root
+    .findAllByProps({ className: 'dsh-perfmon-gpuMetricFill' })
+    .map((node) => node.props.style.inlineSize)
+}
+
+test('the resource card shows a two-half GPU bar between the gauges and the project folder', async (context) => {
   const reading = readingFixture({
     disk: {
       projectDir: '/srv/demo',
@@ -218,24 +225,27 @@ test('the resource card shows one compact GPU line between the gauges and the pr
   })
   const renderer = await mount(context, React.createElement(GaugePanel, { reading, t }))
   const row = renderer.root.findByProps({ className: 'dsh-perfmon-gpuRow' })
-  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuLabel'), ['显卡'])
-  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuClock'), ['1500 MHz'])
-  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuVram'), ['显存 4.0GB / 8.0GB'])
+  // One bar, two labelled halves: the clock on the left and VRAM on the right.
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuMetricLabel'), ['频率', '显存'])
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuMetricValue'), ['1500 MHz', '4.0GB / 8.0GB'])
+  // Each half paints its own proportion: the clock against its boost ceiling
+  // (1500 of 2000) and VRAM against total capacity (4 of 8 GB).
+  assert.deepEqual(gpuFillWidths(renderer), ['75%', '50%'])
   assert.match(row.props.title, /NVIDIA RTX/)
   assert.match(row.props.title, /max 2000 MHz/)
   assert.match(row.props.title, /50%/)
-  // Order matters: the GPU line is a live machine reading and belongs with the
+  // Order matters: the GPU bar is a live machine reading and belongs with the
   // gauges; the project-folder row is a manual on-demand measurement and is last.
   assert.deepEqual(
     renderer.root
       .findAll((node) => node.props.className === 'dsh-perfmon-gauges' || node.props.className === 'dsh-perfmon-disk' || node.props.className === 'dsh-perfmon-gpuRow')
       .map((node) => node.props.className),
     ['dsh-perfmon-gauges', 'dsh-perfmon-gpuRow', 'dsh-perfmon-disk'],
-    'the GPU line sits directly beneath the gauges and above the project-folder line',
+    'the GPU bar sits directly beneath the gauges and above the project-folder line',
   )
 })
 
-test('GPU with VRAM but no frequency still shows the portable figure and a dash for clock', async (context) => {
+test('GPU with VRAM but no frequency shows the VRAM bar and an empty clock bar', async (context) => {
   const reading = readingFixture({
     gpu: {
       status: 'ready', source: 'windows-counters', name: 'AMD Radeon',
@@ -245,19 +255,38 @@ test('GPU with VRAM but no frequency still shows the portable figure and a dash 
     },
   })
   const renderer = await mount(context, React.createElement(GaugePanel, { reading, t }))
-  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuClock'), ['频率 —'])
-  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuVram'), ['显存 2.0GB / 16.0GB'])
+  // The value is a bare dash because the half's own label already names it.
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuMetricValue'), ['—', '2.0GB / 16.0GB'])
+  // With no maximum there is no honest proportion, so the clock paints nothing
+  // rather than a filled bar implying a measurement that was never made.
+  assert.deepEqual(gpuFillWidths(renderer), ['0%', '12.5%'])
 })
 
-test('hidden or legacy hosts do not render the GPU line', async (context) => {
+test('a nonsense GPU percentage never paints outside the track', async (context) => {
+  const reading = readingFixture({
+    gpu: {
+      status: 'ready', source: 'windows-counters', name: 'Odd',
+      clockMhz: 3000, clockMaxMhz: 2000,
+      memoryUsedBytes: 8 * 1024 ** 3, memoryTotalBytes: 8 * 1024 ** 3,
+      memoryPercent: 140, warnings: [],
+    },
+  })
+  const renderer = await mount(context, React.createElement(GaugePanel, { reading, t }))
+  // A clock above its own ceiling, and a percentage over 100, both clamp: the
+  // fill can never be wider than the track it sits in.
+  assert.deepEqual(gpuFillWidths(renderer), ['100%', '100%'])
+})
+
+test('hidden or legacy hosts do not render the GPU bar', async (context) => {
   const hidden = await mount(context, React.createElement(GaugePanel, {
     reading: readingFixture({ gpu: { status: 'hidden' } }), t,
   }))
   assert.equal(hidden.root.findAllByProps({ className: 'dsh-perfmon-gpuRow' }).length, 0)
   const legacy = await mount(context, React.createElement(GaugePanel, { reading: readingFixture({ gpu: undefined }), t }))
   assert.equal(legacy.root.findAllByProps({ className: 'dsh-perfmon-gpuRow' }).length, 1)
-  assert.deepEqual(textsOf(legacy, 'dsh-perfmon-gpuClock'), ['频率 —'])
-  assert.deepEqual(textsOf(legacy, 'dsh-perfmon-gpuVram'), ['显存 —'])
+  // No reading at all still shows both halves, each an explicit dash.
+  assert.deepEqual(textsOf(legacy, 'dsh-perfmon-gpuMetricValue'), ['—', '—'])
+  assert.deepEqual(gpuFillWidths(legacy), ['0%', '0%'])
 })
 
 test('the resource window carries the project-folder line', async (context) => {

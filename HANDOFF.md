@@ -21,7 +21,7 @@ button.
 | Source version | **0.4.2** |
 | Published on npm | 0.2.0, 0.2.2, 0.3.1, 0.3.2, 0.4.0 — public, zero runtime dependencies |
 | GitHub Releases | v0.1.0 … v0.4.0 (latest; carries the version-free tarball) |
-| Tests | 151 specs across 8 files, green on Windows (148 pass / 3 linux-only skips) and Linux |
+| Tests | 156 specs across 9 files, green on Windows (153 pass / 3 linux-only skips) and Linux |
 | Community list | [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984) — submitted, both checks green, awaiting a maintainer read |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
@@ -500,6 +500,22 @@ Read this section before editing. Every item below was an actual failure.
     for the Windows counters: ~110 ms cold, ~8 ms warm, plus ~50 ms for
     `nvidia-smi` — all inside the PowerShell call the metrics reader already
     makes, so this row spawns no extra process.
+
+24. **`src/client/styles.js` is a CSS string inside a JS template literal, so a
+    raw backtick in a comment ends the stylesheet.** A comment that quoted
+    `flex: none` and `minmax(0, 1fr)` terminated the literal early and esbuild
+    reported `Expected ";" but found "flex"` — the CSS after the stray backtick
+    was being parsed as JavaScript. Write CSS comments in plain words, never with
+    markdown-style backticks. (JSDoc comments above the literal are fine: they sit
+    outside it.)
+
+25. **Never delete CSS with a `replace_all` edit.** The GPU rules were added twice
+    by overlapping edits and a `replace_all` removal was meant to drop the
+    duplicate — it dropped *both*, leaving the row with no layout at all. The
+    symptom was the one the user reported: bare text running out of the card's
+    left edge, with nothing visible in the specs. Read the block, then delete the
+    duplicate by its exact surrounding context, and re-grep the class name
+    afterwards to confirm exactly one definition survives.
 
 ## Open work
 

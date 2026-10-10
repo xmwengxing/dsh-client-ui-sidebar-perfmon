@@ -43,10 +43,12 @@ var ZH = {
   resources: "\u8D44\u6E90\u5360\u7528",
   processes: "\u8FDB\u7A0B\u5217\u8868",
   gpuLine: "\u663E\u5361",
+  gpuClockLabel: "\u9891\u7387",
+  gpuVramLabel: "\u663E\u5B58",
   gpuClock: "{clock} MHz",
-  gpuClockUnavailable: "\u9891\u7387 \u2014",
-  gpuVram: "\u663E\u5B58 {used} / {total}",
-  gpuVramUnavailable: "\u663E\u5B58 \u2014",
+  gpuClockUnavailable: "\u2014",
+  gpuVram: "{used} / {total}",
+  gpuVramUnavailable: "\u2014",
   temperatures: "\u6E29\u5EA6",
   temperatureCpu: "CPU",
   temperatureGpu: "\u663E\u5361",
@@ -159,10 +161,12 @@ var EN = {
   resources: "Resource usage",
   processes: "Processes",
   gpuLine: "GPU",
+  gpuClockLabel: "Clock",
+  gpuVramLabel: "VRAM",
   gpuClock: "{clock} MHz",
-  gpuClockUnavailable: "clock \u2014",
-  gpuVram: "VRAM {used} / {total}",
-  gpuVramUnavailable: "VRAM \u2014",
+  gpuClockUnavailable: "\u2014",
+  gpuVram: "{used} / {total}",
+  gpuVramUnavailable: "\u2014",
   temperatures: "Temperatures",
   temperatureCpu: "CPU",
   temperatureGpu: "GPU",
@@ -480,6 +484,82 @@ var STYLES = `
 .dsh-perfmon-diskAction:hover {
   color: var(--dsw-alias-label-primary, currentColor);
   border-color: var(--dsw-alias-border-l3, rgba(127, 127, 127, 0.34));
+}
+
+/* The GPU bar: one row split into two halves, the clock on the left and VRAM on
+   the right. Like the folder row it is fixed (flex: none), because a shrinking
+   child inside the card's flex column is the squeeze that twice bit the search
+   field.
+
+   Layout rule: wrap, never overflow. Each half declares a flex basis of the
+   width it actually needs (roughly label + a "868 MB / 11.0 GB" value). On a
+   normal sidebar both halves share one line, which is the single bar the row
+   was asked for. When the panel is genuinely too narrow for two, the second
+   half wraps onto its own line and takes the full width \u2014 a stacked pair still
+   showing both numbers, rather than a clipped value.
+
+   The tracks clip (overflow: hidden) and every box carries a zero minimum, so a
+   long value can never widen the row past the card's edge: the failure this
+   replaces was bare text running out of the card's left side. */
+.dsh-perfmon-gpuRow {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 7px 12px 9px;
+  border-block-start: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.22));
+  font-size: 11px;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-gpuMetric {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 135px;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-gpuMetricLabel {
+  color: var(--dsw-alias-label-secondary, currentColor);
+  white-space: nowrap;
+  flex: none;
+}
+
+/* The track reserves the whole column and paints the fill behind the text, so a
+   long value never needs extra width and the row never changes height. */
+.dsh-perfmon-gpuMetricTrack {
+  position: relative;
+  display: flex;
+  align-items: center;
+  block-size: 17px;
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, rgba(127, 127, 127, 0.10));
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* The fill is decorative only: never let it intercept the row's tooltip. */
+.dsh-perfmon-gpuMetricFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  opacity: 0.2;
+  pointer-events: none;
+  transition: inline-size 0.3s ease;
+}
+
+.dsh-perfmon-gpuMetricValue {
+  position: relative;
+  color: var(--dsw-alias-label-primary, currentColor);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-inline: 7px;
+  min-inline-size: 0;
 }
 
 /* The tag row and the data rows share one template, so every tag is the header
@@ -1154,18 +1234,48 @@ function DiskPanel({ disk, warnings = [], sessionId, measure, t }) {
     )
   );
 }
-function GpuPanel({ clock, vram, title, hidden, t }) {
+function GpuMetric({ label, value, percent, tone }) {
+  const known = typeof percent === "number" && Number.isFinite(percent);
+  return (0, import_react.createElement)(
+    "div",
+    { className: "dsh-perfmon-gpuMetric" },
+    (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuMetricLabel" }, label),
+    (0, import_react.createElement)(
+      "span",
+      { className: "dsh-perfmon-gpuMetricTrack" },
+      // The fill is the track's own background layer, so a long value still
+      // reserves the whole width and the text never pushes past the card edge.
+      (0, import_react.createElement)("span", {
+        className: "dsh-perfmon-gpuMetricFill",
+        style: { inlineSize: `${String(known ? Math.min(Math.max(percent, 0), 100) : 0)}%`, background: tone }
+      }),
+      (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuMetricValue" }, value)
+    )
+  );
+}
+function GpuPanel({ clock, vram, clockPercent, vramPercent, title, hidden, t }) {
   if (hidden) return null;
   return (0, import_react.createElement)(
     "div",
-    { className: "dsh-perfmon-gpuRow", title },
-    (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuLabel" }, t("gpuLine")),
-    (0, import_react.createElement)(
-      "span",
-      { className: "dsh-perfmon-gpuStats" },
-      (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuClock" }, clock),
-      (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuVram" }, vram)
-    )
+    {
+      className: "dsh-perfmon-gpuRow",
+      // The name is what a screen reader announces for the pair; the tooltip
+      // carries the detail a sighted reader gets from hovering.
+      "aria-label": t("gpuLine"),
+      title
+    },
+    (0, import_react.createElement)(GpuMetric, {
+      label: t("gpuClockLabel"),
+      value: clock,
+      percent: clockPercent,
+      tone: "var(--dsw-alias-brand-primary, #4f6ef7)"
+    }),
+    (0, import_react.createElement)(GpuMetric, {
+      label: t("gpuVramLabel"),
+      value: vram,
+      percent: vramPercent,
+      tone: "var(--dsw-alias-state-warn-primary, #d99a2b)"
+    })
   );
 }
 function GaugePanel(props) {
@@ -1189,6 +1299,7 @@ function GaugePanel(props) {
   const swapDetail = memory == null ? EMPTY : swapEnabled ? t("usedOfTotal", { used: formatBytes(memory.swapUsed), total: formatBytes(memory.swapTotal) }) : t("swapDisabled");
   const gpu = reading?.gpu;
   const gpuClock = typeof gpu?.clockMhz === "number" && Number.isFinite(gpu.clockMhz) ? t("gpuClock", { clock: String(Math.round(gpu.clockMhz)) }) : t("gpuClockUnavailable");
+  const gpuClockPercent = typeof gpu?.clockMhz === "number" && typeof gpu?.clockMaxMhz === "number" && gpu.clockMaxMhz > 0 ? gpu.clockMhz / gpu.clockMaxMhz * 100 : null;
   const gpuVram = typeof gpu?.memoryUsedBytes === "number" && typeof gpu?.memoryTotalBytes === "number" ? t("gpuVram", {
     used: formatBytesCompact(gpu.memoryUsedBytes),
     total: formatBytesCompact(gpu.memoryTotalBytes)
@@ -1247,7 +1358,15 @@ function GaugePanel(props) {
     // The GPU line sits directly under the gauges and above the project-folder
     // row: it is a live machine reading, like the gauges, whereas the folder row
     // is a manual on-demand measurement and belongs last.
-    (0, import_react.createElement)(GpuPanel, { clock: gpuClock, vram: gpuVram, title: gpuTitle, hidden: gpuHidden, t }),
+    (0, import_react.createElement)(GpuPanel, {
+      clock: gpuClock,
+      vram: gpuVram,
+      clockPercent: gpuClockPercent,
+      vramPercent: typeof gpu?.memoryPercent === "number" ? gpu.memoryPercent : null,
+      title: gpuTitle,
+      hidden: gpuHidden,
+      t
+    }),
     (0, import_react.createElement)(DiskPanel, {
       disk: reading?.disk,
       warnings: reading?.warnings,

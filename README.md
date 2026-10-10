@@ -40,13 +40,11 @@ Session header:
   - **Resource usage**: ring gauges for CPU, memory and swap, each with its
     percentage, a supporting line (core count and load average, used-of-total,
     or the fact that the host has no swap), and a header naming the host.
-  - **GPU** (one compact line under the gauges): the core clock in MHz and
-    dedicated VRAM used / total. Hovering shows the adapter name, the maximum
-    clock, and the VRAM percentage. These are unlike metrics — MHz against a moving
-    boost target, bytes against fixed VRAM — so the row prints numbers rather than
-    wrapping them in rings, which would imply a shared percentage scale that means
-    nothing. VRAM needs no third-party software; the clock does (see
-    [GPU](#gpu-clock-and-vram)).
+  - **GPU** (one bar under the gauges, split into two halves): the core clock on
+    the left and dedicated VRAM on the right, each with a fill showing how far
+    along that figure is. Hovering shows the adapter name, the maximum clock and
+    the VRAM percentage. The bar costs one resource-card line and needs no
+    third-party software for VRAM (see [GPU](#gpu-clock-and-vram)).
   - **Temperatures**: four tiles — CPU, GPU, motherboard and drives — each two
     lines: the reading in °C, then the component's name. The tiles are coloured on
     a cool / warm / hot scale (70 °C and 85 °C). Hovering a tile names every sensor
@@ -247,10 +245,24 @@ Two rules follow from that table:
   Inventing a percentage from a guessed maximum clock would be exactly the
   confident-but-meaningless figure this plugin avoids elsewhere.
 
-The row is one line, not two concentric rings: a clock and a byte count have no
-shared meaningful scale, and rings would imply one. It reuses the panel's own
-refresh cadence (`gpuIntervalMs`, defaulting to `refreshIntervalMs`), because VRAM
-is the figure that matters while a model loads. Set `gpu: false` to hide it.
+**The layout is a bar, not rings.** One row split into two halves — clock left,
+VRAM right — each half a labelled track with its own fill. Rings were rejected on
+purpose: a clock and a byte count share no meaningful scale, so two concentric
+arcs would imply one that does not exist. The two fills are also honest about
+being different things: the clock's is a proportion of its own boost ceiling (a
+moving target, never "percent full"), while VRAM's is a true used-of-capacity
+share.
+
+**It wraps rather than overflows.** Each half asks for the width it needs; on a
+normal sidebar both share one line, and on a panel too narrow for two the second
+half moves to its own line and takes the full width. An earlier version had no
+layout at all, so the bare text ran out of the card's left edge — and before the
+wrap, a tight panel simply trimmed the value. Nothing is ever clipped or allowed
+past the card edge now.
+
+It reuses the panel's own refresh cadence (`gpuIntervalMs`, defaulting to
+`refreshIntervalMs`), because VRAM is the figure that matters while a model loads.
+Set `gpu: false` to hide it.
 
 ### Temperatures
 

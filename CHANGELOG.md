@@ -2,24 +2,33 @@
 
 ## 0.4.2
 
-- **The resource card has one compact GPU line** directly below project-folder size:
-  core clock in MHz and dedicated VRAM used / total. No new card and no second
-  gauge — these are unlike metrics (MHz versus bytes), so wrapping them in
-  concentric rings would imply a shared percentage scale that means nothing.
-  The tooltip carries the adapter name, maximum clock, and VRAM percentage.
+- **The resource card gains a GPU bar between the gauges and the project-folder
+  row**: one row split into two halves, the core clock on the left and dedicated
+  VRAM on the right, each a labelled track with its own fill. No new card. Rings
+  were rejected on purpose — a clock (MHz against a moving boost target) and a
+  byte count share no meaningful scale, so two concentric arcs would imply one
+  that does not exist. The two fills are honest about differing: the clock's is a
+  proportion of its own boost ceiling, VRAM's is a true used-of-capacity share.
 - **VRAM works without any third-party monitor.** Windows reads the OS's own
   `GPUPerformanceCounters` memory counter and the 64-bit adapter total; Linux
   reads per-vendor DRM sysfs. `nvidia-smi` / a running hardware monitor add
-  frequency. Where the OS or installed driver cannot supply a clock, the row
-  explicitly shows `频率 —` while still showing VRAM. This deliberate asymmetry
-  is cross-vendor: AMD/Intel users get memory monitoring even without LHM.
+  frequency. Where the OS or installed driver cannot supply a clock, that half
+  shows `—` while VRAM still reads. This deliberate asymmetry is cross-vendor:
+  AMD/Intel users get memory monitoring even without LHM.
+- **The bar wraps rather than overflows.** Each half asks for the width it needs:
+  a normal sidebar shows one two-half bar, and a panel too narrow for two moves
+  the second half onto its own full-width line. An earlier build had no layout at
+  all, so the bare text ran out of the card's left edge; the first fix clipped the
+  value instead. Measured at 360/300/240/200 px: no escape past the card, no
+  clipping, no sideways scroll.
 - The GPU probe is cached at the normal panel refresh cadence (2 s Linux / 3 s
   macOS / 4 s Windows), and included in the existing snapshot response. The
   Windows counters add about 100 ms to the PowerShell read already used for the
   process list; no extra child process is spawned.
-- Tests: 151 specs, adding 18 GPU-source/probe specs and 3 line-layout/fallback
-  specs. The fallback test pins the fact that Windows can answer VRAM when both
-  `nvidia-smi` and the hardware-monitor WMI provider are absent.
+- Tests: 156 specs, adding 18 GPU-source/probe specs and GPU bar specs covering
+  the two halves, their fill percentages, clamping of a nonsense percentage, the
+  gauges→bar→folder order, and the hidden/legacy shape. A route-composition spec
+  also catches a probe whose variable is referenced but never constructed.
 
 ## 0.4.1
 

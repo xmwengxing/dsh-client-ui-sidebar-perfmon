@@ -197,6 +197,82 @@ export const STYLES = `
   border-color: var(--dsw-alias-border-l3, rgba(127, 127, 127, 0.34));
 }
 
+/* The GPU bar: one row split into two halves, the clock on the left and VRAM on
+   the right. Like the folder row it is fixed (flex: none), because a shrinking
+   child inside the card's flex column is the squeeze that twice bit the search
+   field.
+
+   Layout rule: wrap, never overflow. Each half declares a flex basis of the
+   width it actually needs (roughly label + a "868 MB / 11.0 GB" value). On a
+   normal sidebar both halves share one line, which is the single bar the row
+   was asked for. When the panel is genuinely too narrow for two, the second
+   half wraps onto its own line and takes the full width — a stacked pair still
+   showing both numbers, rather than a clipped value.
+
+   The tracks clip (overflow: hidden) and every box carries a zero minimum, so a
+   long value can never widen the row past the card's edge: the failure this
+   replaces was bare text running out of the card's left side. */
+.dsh-perfmon-gpuRow {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 7px 12px 9px;
+  border-block-start: 0.5px solid var(--dsw-alias-border-l1, rgba(127, 127, 127, 0.22));
+  font-size: 11px;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-gpuMetric {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 135px;
+  min-inline-size: 0;
+}
+
+.dsh-perfmon-gpuMetricLabel {
+  color: var(--dsw-alias-label-secondary, currentColor);
+  white-space: nowrap;
+  flex: none;
+}
+
+/* The track reserves the whole column and paints the fill behind the text, so a
+   long value never needs extra width and the row never changes height. */
+.dsh-perfmon-gpuMetricTrack {
+  position: relative;
+  display: flex;
+  align-items: center;
+  block-size: 17px;
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: var(--dsw-alias-bg-layer-2, rgba(127, 127, 127, 0.10));
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* The fill is decorative only: never let it intercept the row's tooltip. */
+.dsh-perfmon-gpuMetricFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  opacity: 0.2;
+  pointer-events: none;
+  transition: inline-size 0.3s ease;
+}
+
+.dsh-perfmon-gpuMetricValue {
+  position: relative;
+  color: var(--dsw-alias-label-primary, currentColor);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-inline: 7px;
+  min-inline-size: 0;
+}
+
 /* The tag row and the data rows share one template, so every tag is the header
    of the column it orders. The two metric columns are sized to their widest real
    content ("1024.0%" and "999.9 MB · 99%") and never shrink; the name column

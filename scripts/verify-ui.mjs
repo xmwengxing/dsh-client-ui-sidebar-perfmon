@@ -171,12 +171,21 @@ const SNAPSHOT = `(() => {
     foot: root.querySelector('.dsh-perfmon-foot').textContent,
     gpu: (() => {
       const row = root.querySelector('.dsh-perfmon-gpuRow');
-      return row ? {
-        label: row.querySelector('.dsh-perfmon-gpuLabel')?.textContent ?? null,
-        clock: row.querySelector('.dsh-perfmon-gpuClock')?.textContent ?? null,
-        vram: row.querySelector('.dsh-perfmon-gpuVram')?.textContent ?? null,
+      if (!row) return null;
+      // Read each half as it renders: label, value, and the painted fill width,
+      // so the screenshot's proportions can be checked against the numbers.
+      const halves = Array.from(row.querySelectorAll('.dsh-perfmon-gpuMetric')).map((half) => ({
+        label: half.querySelector('.dsh-perfmon-gpuMetricLabel')?.textContent ?? null,
+        value: half.querySelector('.dsh-perfmon-gpuMetricValue')?.textContent ?? null,
+        fill: half.querySelector('.dsh-perfmon-gpuMetricFill')?.style.inlineSize ?? null,
+      }));
+      return {
+        halves,
+        label: halves[0]?.label ?? null,
+        clock: halves[0]?.value ?? null,
+        vram: halves[1]?.value ?? null,
         title: row.getAttribute('title'),
-      } : null;
+      };
     })(),
     resourcesTitle: root.querySelector('.dsh-perfmon-card[aria-label]')?.getAttribute('aria-label') ?? null,
     temps: Array.from(root.querySelectorAll('.dsh-perfmon-temp')).map((tile) => ({

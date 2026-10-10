@@ -156,28 +156,74 @@ export function DiskPanel({ disk, warnings = [], sessionId, measure, t }) {
 }
 
 /**
- * Render the one-line GPU readout under the gauges.
+ * One half of the GPU bar: a label, a value, and a fill whose width means
+ * "how far along this figure is".
  *
- * The row is deliberately one place, not an inner/outer circle: there is no
- * shared meaningful percentage between a clock (MHz against a moving boost
- * target) and memory (bytes against fixed VRAM). Two concentric arcs would imply
- * one progress scale where there is none. A compact two-column readout is honest
- * and costs only one resource-card line.
- * @param {{clock: string, vram: string, title?: string, hidden?: boolean, t: Function}} props - formatted readings.
- * @returns {import('react').ReactNode} the row, or nothing when hidden.
+ * The fill is a *background* behind the text rather than a separate block, so
+ * the row stays one line tall and the numbers never wrap or overflow: the text
+ * sits on top at full width while only the painted proportion changes.
+ * @param {{label: string, value: string, percent: number | null, tone: string}} props - one metric.
+ * @returns {import('react').ReactNode} the half.
  */
-export function GpuPanel({ clock, vram, title, hidden, t }) {
+function GpuMetric({ label, value, percent, tone }) {
+  const known = typeof percent === 'number' && Number.isFinite(percent)
+  return h(
+    'div',
+    { className: 'dsh-perfmon-gpuMetric' },
+    h('span', { className: 'dsh-perfmon-gpuMetricLabel' }, label),
+    h(
+      'span',
+      { className: 'dsh-perfmon-gpuMetricTrack' },
+      // The fill is the track's own background layer, so a long value still
+      // reserves the whole width and the text never pushes past the card edge.
+      h('span', {
+        className: 'dsh-perfmon-gpuMetricFill',
+        style: { inlineSize: `${String(known ? Math.min(Math.max(percent, 0), 100) : 0)}%`, background: tone },
+      }),
+      h('span', { className: 'dsh-perfmon-gpuMetricValue' }, value),
+    ),
+  )
+}
+
+/**
+ * Render the one-line GPU bar under the gauges.
+ *
+ * Two halves sharing one horizontal bar: the clock on the left, VRAM on the
+ * right. Each half is a labelled track with its own fill, which is what makes
+ * the row readable at a glance while a model loads — and it is honest about the
+ * asymmetry between the two figures: the clock's fill is against its boost
+ * ceiling (a moving target, shown as a proportion, never as "percent of
+ * capacity"), while VRAM's fill is a true used/total percentage.
+ *
+ * This replaced a plain text row that had no layout: without a flex container
+ * the two values ran together and overflowed the card's left edge.
+ * @param {{clock: string, vram: string, clockPercent: number | null, vramPercent: number | null,
+ *          title?: string, hidden?: boolean, t: Function}} props - formatted readings and their fills.
+ * @returns {import('react').ReactNode} the bar, or nothing when hidden.
+ */
+export function GpuPanel({ clock, vram, clockPercent, vramPercent, title, hidden, t }) {
   if (hidden) return null
   return h(
     'div',
-    { className: 'dsh-perfmon-gpuRow', title },
-    h('span', { className: 'dsh-perfmon-gpuLabel' }, t('gpuLine')),
-    h(
-      'span',
-      { className: 'dsh-perfmon-gpuStats' },
-      h('span', { className: 'dsh-perfmon-gpuClock' }, clock),
-      h('span', { className: 'dsh-perfmon-gpuVram' }, vram),
-    ),
+    {
+      className: 'dsh-perfmon-gpuRow',
+      // The name is what a screen reader announces for the pair; the tooltip
+      // carries the detail a sighted reader gets from hovering.
+      'aria-label': t('gpuLine'),
+      title,
+    },
+    h(GpuMetric, {
+      label: t('gpuClockLabel'),
+      value: clock,
+      percent: clockPercent,
+      tone: 'var(--dsw-alias-brand-primary, #4f6ef7)',
+    }),
+    h(GpuMetric, {
+      label: t('gpuVramLabel'),
+      value: vram,
+      percent: vramPercent,
+      tone: 'var(--dsw-alias-state-warn-primary, #d99a2b)',
+    }),
   )
 }
 
@@ -234,6 +280,13 @@ export function GaugePanel(props) {
   const gpuClock = typeof gpu?.clockMhz === 'number' && Number.isFinite(gpu.clockMhz)
     ? t('gpuClock', { clock: String(Math.round(gpu.clockMhz)) })
     : t('gpuClockUnavailable')
+  // The clock's fill is against its own boost ceiling, which the driver reports.
+  // It is a proportion of a *moving target*, not a capacity: a GPU idling at
+  // 139 MHz of 1974 is not "7% full", so the tooltip says as much.
+  const gpuClockPercent =
+    typeof gpu?.clockMhz === 'number' && typeof gpu?.clockMaxMhz === 'number' && gpu.clockMaxMhz > 0
+      ? (gpu.clockMhz / gpu.clockMaxMhz) * 100
+      : null
   const gpuVram = typeof gpu?.memoryUsedBytes === 'number' && typeof gpu?.memoryTotalBytes === 'number'
     ? t('gpuVram', {
         used: formatBytesCompact(gpu.memoryUsedBytes),
@@ -305,7 +358,15 @@ export function GaugePanel(props) {
     // The GPU line sits directly under the gauges and above the project-folder
     // row: it is a live machine reading, like the gauges, whereas the folder row
     // is a manual on-demand measurement and belongs last.
-    h(GpuPanel, { clock: gpuClock, vram: gpuVram, title: gpuTitle, hidden: gpuHidden, t }),
+    h(GpuPanel, {
+      clock: gpuClock,
+      vram: gpuVram,
+      clockPercent: gpuClockPercent,
+      vramPercent: typeof gpu?.memoryPercent === 'number' ? gpu.memoryPercent : null,
+      title: gpuTitle,
+      hidden: gpuHidden,
+      t,
+    }),
     h(DiskPanel, {
       disk: reading?.disk,
       warnings: reading?.warnings,
