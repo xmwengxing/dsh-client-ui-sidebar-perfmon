@@ -32,6 +32,25 @@ export function formatBytes(bytes, empty = EMPTY) {
 }
 
 /**
+ * Format a byte count compactly for a one-line readout, using the same binary
+ * prefixes as `formatBytes` but omitting the space before the unit.
+ * @param {number | null | undefined} bytes - the value.
+ * @param {string} [empty] - text for a missing value.
+ * @returns {string} a short value such as `7.8GB`.
+ */
+export function formatBytesCompact(bytes, empty = EMPTY) {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return empty
+  if (bytes < 1024) return `${String(Math.round(bytes))}B`
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)}${BYTE_UNITS[unit]}`
+}
+
+/**
  * Format a percentage for the gauges and rows.
  * @param {number | null | undefined} value - the percentage.
  * @param {string} [empty] - text for a missing value.

@@ -10,7 +10,7 @@
  */
 
 import { createElement as h } from 'react'
-import { barWidth, EMPTY, formatBytes, formatDuration, formatPercent } from './format.js'
+import { barWidth, EMPTY, formatBytes, formatBytesCompact, formatDuration, formatPercent, formatShare } from './format.js'
 import { describeWarning } from './copy.js'
 
 /**
@@ -156,6 +156,32 @@ export function DiskPanel({ disk, warnings = [], sessionId, measure, t }) {
 }
 
 /**
+ * Render the one-line GPU readout under the gauges.
+ *
+ * The row is deliberately one place, not an inner/outer circle: there is no
+ * shared meaningful percentage between a clock (MHz against a moving boost
+ * target) and memory (bytes against fixed VRAM). Two concentric arcs would imply
+ * one progress scale where there is none. A compact two-column readout is honest
+ * and costs only one resource-card line.
+ * @param {{clock: string, vram: string, title?: string, hidden?: boolean, t: Function}} props - formatted readings.
+ * @returns {import('react').ReactNode} the row, or nothing when hidden.
+ */
+export function GpuPanel({ clock, vram, title, hidden, t }) {
+  if (hidden) return null
+  return h(
+    'div',
+    { className: 'dsh-perfmon-gpuRow', title },
+    h('span', { className: 'dsh-perfmon-gpuLabel' }, t('gpuLine')),
+    h(
+      'span',
+      { className: 'dsh-perfmon-gpuStats' },
+      h('span', { className: 'dsh-perfmon-gpuClock' }, clock),
+      h('span', { className: 'dsh-perfmon-gpuVram' }, vram),
+    ),
+  )
+}
+
+/**
  * Render the resource window.
  * @param {{reading: object | undefined, measure: object, t: (key: string, values?: object) => string}} props - the current reading, the scan control, and translator.
  * @returns {import('react').ReactNode} the resource card.
@@ -203,6 +229,30 @@ export function GaugePanel(props) {
       : swapEnabled
         ? t('usedOfTotal', { used: formatBytes(memory.swapUsed), total: formatBytes(memory.swapTotal) })
         : t('swapDisabled')
+
+  const gpu = reading?.gpu
+  const gpuClock = typeof gpu?.clockMhz === 'number' && Number.isFinite(gpu.clockMhz)
+    ? t('gpuClock', { clock: String(Math.round(gpu.clockMhz)) })
+    : t('gpuClockUnavailable')
+  const gpuVram = typeof gpu?.memoryUsedBytes === 'number' && typeof gpu?.memoryTotalBytes === 'number'
+    ? t('gpuVram', {
+        used: formatBytesCompact(gpu.memoryUsedBytes),
+        total: formatBytesCompact(gpu.memoryTotalBytes),
+      })
+    : t('gpuVramUnavailable')
+  const gpuClockTitle =
+    typeof gpu?.clockMhz === 'number' && Number.isFinite(gpu.clockMhz)
+      ? `${gpuClock}${typeof gpu.clockMaxMhz === 'number' ? ` · max ${String(Math.round(gpu.clockMaxMhz))} MHz` : ''}`
+      : t('gpuClockUnavailable')
+  const gpuVramTitle =
+    typeof gpu?.memoryUsedBytes === 'number' && typeof gpu?.memoryTotalBytes === 'number'
+      ? `${formatBytes(gpu.memoryUsedBytes)} / ${formatBytes(gpu.memoryTotalBytes)}${typeof gpu.memoryPercent === 'number' ? ` · ${formatShare(gpu.memoryPercent)}` : ''}`
+      : t('gpuVramUnavailable')
+  const gpuName = typeof gpu?.name === 'string' && gpu.name !== '' ? gpu.name : undefined
+  const gpuTitle = [gpuName, gpuClockTitle, gpuVramTitle, gpu?.source]
+    .filter((part) => typeof part === 'string' && part !== '')
+    .join('\n')
+  const gpuHidden = gpu?.status === 'hidden'
 
   return h(
     'section',
@@ -258,5 +308,6 @@ export function GaugePanel(props) {
       measure: props.measure,
       t,
     }),
+    h(GpuPanel, { gpu, clock: gpuClock, vram: gpuVram, title: gpuTitle, hidden: gpu?.status === 'hidden', t }),
   )
 }

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.2
+
+- **The resource card has one compact GPU line** directly below project-folder size:
+  core clock in MHz and dedicated VRAM used / total. No new card and no second
+  gauge — these are unlike metrics (MHz versus bytes), so wrapping them in
+  concentric rings would imply a shared percentage scale that means nothing.
+  The tooltip carries the adapter name, maximum clock, and VRAM percentage.
+- **VRAM works without any third-party monitor.** Windows reads the OS's own
+  `GPUPerformanceCounters` memory counter and the 64-bit adapter total; Linux
+  reads per-vendor DRM sysfs. `nvidia-smi` / a running hardware monitor add
+  frequency. Where the OS or installed driver cannot supply a clock, the row
+  explicitly shows `频率 —` while still showing VRAM. This deliberate asymmetry
+  is cross-vendor: AMD/Intel users get memory monitoring even without LHM.
+- The GPU probe is cached at the normal panel refresh cadence (2 s Linux / 3 s
+  macOS / 4 s Windows), and included in the existing snapshot response. The
+  Windows counters add about 100 ms to the PowerShell read already used for the
+  process list; no extra child process is spawned.
+- Tests: 151 specs, adding 18 GPU-source/probe specs and 3 line-layout/fallback
+  specs. The fallback test pins the fact that Windows can answer VRAM when both
+  `nvidia-smi` and the hardware-monitor WMI provider are absent.
+
 ## 0.4.1
 
 - **Fixed: the CPU temperature was wrong, and backwards.** With a hardware monitor

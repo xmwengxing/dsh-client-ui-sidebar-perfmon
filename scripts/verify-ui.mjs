@@ -169,6 +169,16 @@ const SNAPSHOT = `(() => {
       mem: cell(row.querySelectorAll('.dsh-perfmon-metric')[1]),
     })),
     foot: root.querySelector('.dsh-perfmon-foot').textContent,
+    gpu: (() => {
+      const row = root.querySelector('.dsh-perfmon-gpuRow');
+      return row ? {
+        label: row.querySelector('.dsh-perfmon-gpuLabel')?.textContent ?? null,
+        clock: row.querySelector('.dsh-perfmon-gpuClock')?.textContent ?? null,
+        vram: row.querySelector('.dsh-perfmon-gpuVram')?.textContent ?? null,
+        title: row.getAttribute('title'),
+      } : null;
+    })(),
+    resourcesTitle: root.querySelector('.dsh-perfmon-card[aria-label]')?.getAttribute('aria-label') ?? null,
     temps: Array.from(root.querySelectorAll('.dsh-perfmon-temp')).map((tile) => ({
       value: tile.querySelector('.dsh-perfmon-tempValue')?.textContent ?? null,
       label: tile.querySelector('.dsh-perfmon-tempLabel')?.textContent ?? null,

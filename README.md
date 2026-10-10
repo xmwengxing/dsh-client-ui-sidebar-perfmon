@@ -40,6 +40,13 @@ Session header:
   - **Resource usage**: ring gauges for CPU, memory and swap, each with its
     percentage, a supporting line (core count and load average, used-of-total,
     or the fact that the host has no swap), and a header naming the host.
+  - **GPU** (one compact line under the gauges): the core clock in MHz and
+    dedicated VRAM used / total. Hovering shows the adapter name, the maximum
+    clock, and the VRAM percentage. These are unlike metrics — MHz against a moving
+    boost target, bytes against fixed VRAM — so the row prints numbers rather than
+    wrapping them in rings, which would imply a shared percentage scale that means
+    nothing. VRAM needs no third-party software; the clock does (see
+    [GPU](#gpu-clock-and-vram)).
   - **Temperatures**: four tiles — CPU, GPU, motherboard and drives — each two
     lines: the reading in °C, then the component's name. The tiles are coloured on
     a cool / warm / hot scale (70 °C and 85 °C). Hovering a tile names every sensor
@@ -133,6 +140,8 @@ something else:
     projectDirEntryBudget: 50000   # 100–1000000; entries one folder's scan may examine
     projectDirMaxDirs: 12          # 1–100; distinct folders one scan may cover
     temperatureIntervalMs: 15000   # 2000–600000; how long one temperature reading is reused
+    gpuIntervalMs: 4000            # 500–60000; defaults to refreshIntervalMs
+    # gpu: false                   # hide the GPU line entirely
     # temperature: false           # hide the temperature card entirely
     # projectDir: /srv/demo        # pin one folder instead of the viewed session's workspace
     # projectDir: ''               # or hide the directory-size line entirely
@@ -213,6 +222,35 @@ replaces it. The regular polling reads only the stored result — an open panel
 costs nothing between scans. The walk is bounded (50,000 entries per folder, 12
 folders per scan), symlinks are neither followed nor counted, and every
 short-cut is named beside the figure instead of quietly overstating accuracy.
+
+### GPU clock and VRAM
+
+The GPU line is deliberately **asymmetric**: VRAM is available almost everywhere,
+the clock often is not, and the panel says which is which rather than inventing a
+number.
+
+| Figure | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| VRAM used / total | `amdgpu` sysfs (`mem_info_vram_*`); `nvidia-smi` | `nvidia-smi` only | the OS's own `GPUPerformanceCounters` memory counter (any vendor, **nothing installed**), plus the 64-bit adapter total from the registry; `nvidia-smi` when present |
+| Core clock | `gt_cur_freq_mhz` (i915) or `amdgpu` `pp_dpm_sclk`; `nvidia-smi` | `nvidia-smi` only | `nvidia-smi` (NVIDIA) or a running LibreHardwareMonitor / OpenHardwareMonitor (other vendors) |
+
+Two rules follow from that table:
+
+- **VRAM needs no third-party software.** On Windows the operating system reports
+  dedicated usage for NVIDIA, AMD and Intel alike, and the adapter's true 64-bit
+  total comes from the display class registry key — deliberately **not**
+  `Win32_VideoController.AdapterRAM`, which is a 32-bit field that wraps at 4 GiB
+  (this machine's 11 GiB card reports 4293918720 bytes there).
+- **The clock has no OS-level source on Windows.** The counter set exposes memory
+  usage and utilisation but no clock field, so on a machine with neither
+  `nvidia-smi` nor a hardware monitor the clock shows `—` while VRAM still reads.
+  Inventing a percentage from a guessed maximum clock would be exactly the
+  confident-but-meaningless figure this plugin avoids elsewhere.
+
+The row is one line, not two concentric rings: a clock and a byte count have no
+shared meaningful scale, and rings would imply one. It reuses the panel's own
+refresh cadence (`gpuIntervalMs`, defaulting to `refreshIntervalMs`), because VRAM
+is the figure that matters while a model loads. Set `gpu: false` to hide it.
 
 ### Temperatures
 

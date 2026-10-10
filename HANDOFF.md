@@ -18,10 +18,10 @@ button.
 | Package | `@xmwengxing/dsh-client-ui-sidebar-perfmon` (kind `perfmon`) |
 | Repository | https://github.com/xmwengxing/dsh-client-ui-sidebar-perfmon |
 | Target | `dsh` **0.2.0-rc.1**, Node 24, npm 11, pnpm 12 |
-| Source version | **0.4.1** |
+| Source version | **0.4.2** |
 | Published on npm | 0.2.0, 0.2.2, 0.3.1, 0.3.2, 0.4.0 — public, zero runtime dependencies |
 | GitHub Releases | v0.1.0 … v0.4.0 (latest; carries the version-free tarball) |
-| Tests | 130 specs across 7 files, green on Windows (127 pass / 3 linux-only skips) and Linux (130 pass) |
+| Tests | 151 specs across 8 files, green on Windows (148 pass / 3 linux-only skips) and Linux |
 | Community list | [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984) — submitted, both checks green, awaiting a maintainer read |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
@@ -48,6 +48,9 @@ Relative to the repository root.
 | `src/host/temperature/linux.js` | 233 | `/sys/class/hwmon`, falling back to `/sys/class/thermal`. The only source that spawns nothing. |
 | `src/host/temperature/darwin.js` | 141 | `powermetrics` (root) → `osx-cpu-temp` → `istats`; unavailable when none answers. Exports its parsers. |
 | `src/host/temperature/generic.js` | 68 | Fallback: a Linux-compatible hwmon tree, else FreeBSD `sysctl dev.cpu.N.temperature`. |
+| `src/host/gpu/index.js` | 170 | The GPU probe: source selection, `memoryPercent`, and a cache at the panel's own cadence. |
+| `src/host/gpu/win32.js` | 192 | One PowerShell call: OS counters for VRAM (any vendor), `nvidia-smi`, then a hardware monitor for the clock. Exports `GPU_SCRIPT` and `parseGpuSample`. |
+| `src/host/gpu/linux.js` | 218 | sysfs per vendor (`amdgpu`, `i915`) plus `nvidia-smi`; also the generic-platform path. Exports `parseNvidiaSmi`, `parseAmdDpmFrequency`, `readDrmCard`. |
 | `lib/index.js` | built | Bundled host half. **Committed** (so a git install works even if the build is not allowed). |
 
 ### Browser half — runs in the GUI
@@ -477,6 +480,26 @@ Read this section before editing. Every item below was an actual failure.
     publish step"* reports **success without ever exercising OIDC** — v0.3.1
     looked like proof the setup worked, and it was not. Only a run that logs
     `+ <name>@<version>` has really published.
+
+23. **VRAM and GPU clock do not come from the same place, and the asymmetry is the
+    design.** `Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory`
+    reports dedicated VRAM for NVIDIA, AMD and Intel with **nothing installed**,
+    so VRAM is the cross-vendor baseline. The clock has **no OS-level source on
+    Windows at all** — the counter set exposes memory usage and utilisation but no
+    clock field (checked by enumerating every `GPU*` counter set). It comes from
+    `nvidia-smi` (NVIDIA) or a running LibreHardwareMonitor / OpenHardwareMonitor,
+    and where neither exists the clock is `—` while VRAM still reads. Do not
+    "fix" that dash by inventing a percentage from a guessed maximum clock.
+    Two measurement traps: use `HardwareInformation.qwMemorySize` from the display
+    class registry key for the adapter total, **never**
+    `Win32_VideoController.AdapterRAM`, which is 32-bit and wraps at 4 GiB (this
+    machine's 11 GiB card reports 4293918720 bytes there); and prefer the
+    `AdapterLuid` → counter-instance LUID join when a provider exposes it, because
+    virtual displays (Parsec/GameViewer here) report 0 and a naive "largest value"
+    rule would attribute one GPU's usage to another GPU's capacity. Measured cost
+    for the Windows counters: ~110 ms cold, ~8 ms warm, plus ~50 ms for
+    `nvidia-smi` — all inside the PowerShell call the metrics reader already
+    makes, so this row spawns no extra process.
 
 ## Open work
 

@@ -42,6 +42,11 @@ var ZH = {
   headerButtonOpen: "\u6253\u5F00\u6027\u80FD\u76D1\u63A7\u9762\u677F",
   resources: "\u8D44\u6E90\u5360\u7528",
   processes: "\u8FDB\u7A0B\u5217\u8868",
+  gpuLine: "\u663E\u5361",
+  gpuClock: "{clock} MHz",
+  gpuClockUnavailable: "\u9891\u7387 \u2014",
+  gpuVram: "\u663E\u5B58 {used} / {total}",
+  gpuVramUnavailable: "\u663E\u5B58 \u2014",
   temperatures: "\u6E29\u5EA6",
   temperatureCpu: "CPU",
   temperatureGpu: "\u663E\u5361",
@@ -136,7 +141,13 @@ var ZH = {
     "temperature-mainboard-unavailable": "\u4E3B\u677F\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
     "temperature-disk-unavailable": "\u786C\u76D8\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
     "temperature-json-unreadable": "\u6E29\u5EA6\u67E5\u8BE2\u8F93\u51FA\u65E0\u6CD5\u89E3\u6790",
-    "temperature-failed": "\u6E29\u5EA6\u67E5\u8BE2\u5931\u8D25"
+    "temperature-failed": "\u6E29\u5EA6\u67E5\u8BE2\u5931\u8D25",
+    "gpu-hidden": "\u663E\u5361\u884C\u5DF2\u5728\u914D\u7F6E\u4E2D\u5173\u95ED",
+    "gpu-unavailable": "\u672C\u673A\u6CA1\u6709\u53EF\u8BFB\u53D6\u7684\u663E\u5361\u4FE1\u606F",
+    "gpu-memory-unavailable": "\u663E\u5B58\u5360\u7528\u4E0D\u53EF\u8BFB",
+    "gpu-clock-unavailable": "\u663E\u5361\u9891\u7387\u4E0D\u53EF\u8BFB\uFF08Windows \u65E0\u7CFB\u7EDF\u7EA7\u6765\u6E90\uFF0C\u9700 nvidia-smi \u6216\u786C\u4EF6\u76D1\u63A7\u8F6F\u4EF6\uFF09",
+    "gpu-failed": "\u663E\u5361\u67E5\u8BE2\u5931\u8D25",
+    "gpu-json-unreadable": "\u663E\u5361\u67E5\u8BE2\u8F93\u51FA\u65E0\u6CD5\u89E3\u6790"
   }
 };
 var EN = {
@@ -147,6 +158,11 @@ var EN = {
   headerButtonOpen: "Open the performance monitor",
   resources: "Resource usage",
   processes: "Processes",
+  gpuLine: "GPU",
+  gpuClock: "{clock} MHz",
+  gpuClockUnavailable: "clock \u2014",
+  gpuVram: "VRAM {used} / {total}",
+  gpuVramUnavailable: "VRAM \u2014",
   temperatures: "Temperatures",
   temperatureCpu: "CPU",
   temperatureGpu: "GPU",
@@ -241,7 +257,13 @@ var EN = {
     "temperature-mainboard-unavailable": "Motherboard temperature is unreadable",
     "temperature-disk-unavailable": "Drive temperature is unreadable",
     "temperature-json-unreadable": "The temperature query output could not be parsed",
-    "temperature-failed": "The temperature query failed"
+    "temperature-failed": "The temperature query failed",
+    "gpu-hidden": "The GPU line is disabled in the configuration",
+    "gpu-unavailable": "This host exposes no readable GPU information",
+    "gpu-memory-unavailable": "VRAM usage is unreadable",
+    "gpu-clock-unavailable": "GPU clock is unreadable (Windows has no OS-level source; it needs nvidia-smi or a hardware monitor)",
+    "gpu-failed": "The GPU query failed",
+    "gpu-json-unreadable": "The GPU query output could not be parsed"
   }
 };
 function resolveLanguage() {
@@ -997,6 +1019,17 @@ function formatBytes(bytes, empty = EMPTY) {
   }
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${BYTE_UNITS[unit]}`;
 }
+function formatBytesCompact(bytes, empty = EMPTY) {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return empty;
+  if (bytes < 1024) return `${String(Math.round(bytes))}B`;
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)}${BYTE_UNITS[unit]}`;
+}
 function formatPercent(value, empty = EMPTY) {
   if (typeof value !== "number" || !Number.isFinite(value)) return empty;
   return `${value.toFixed(1)}%`;
@@ -1121,6 +1154,20 @@ function DiskPanel({ disk, warnings = [], sessionId, measure, t }) {
     )
   );
 }
+function GpuPanel({ clock, vram, title, hidden, t }) {
+  if (hidden) return null;
+  return (0, import_react.createElement)(
+    "div",
+    { className: "dsh-perfmon-gpuRow", title },
+    (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuLabel" }, t("gpuLine")),
+    (0, import_react.createElement)(
+      "span",
+      { className: "dsh-perfmon-gpuStats" },
+      (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuClock" }, clock),
+      (0, import_react.createElement)("span", { className: "dsh-perfmon-gpuVram" }, vram)
+    )
+  );
+}
 function GaugePanel(props) {
   const reading = props.reading;
   const t = props.t;
@@ -1140,6 +1187,17 @@ function GaugePanel(props) {
   ].filter((part) => part !== void 0).join(" \xB7 ");
   const swapEnabled = memory != null && memory.swapTotal > 0;
   const swapDetail = memory == null ? EMPTY : swapEnabled ? t("usedOfTotal", { used: formatBytes(memory.swapUsed), total: formatBytes(memory.swapTotal) }) : t("swapDisabled");
+  const gpu = reading?.gpu;
+  const gpuClock = typeof gpu?.clockMhz === "number" && Number.isFinite(gpu.clockMhz) ? t("gpuClock", { clock: String(Math.round(gpu.clockMhz)) }) : t("gpuClockUnavailable");
+  const gpuVram = typeof gpu?.memoryUsedBytes === "number" && typeof gpu?.memoryTotalBytes === "number" ? t("gpuVram", {
+    used: formatBytesCompact(gpu.memoryUsedBytes),
+    total: formatBytesCompact(gpu.memoryTotalBytes)
+  }) : t("gpuVramUnavailable");
+  const gpuClockTitle = typeof gpu?.clockMhz === "number" && Number.isFinite(gpu.clockMhz) ? `${gpuClock}${typeof gpu.clockMaxMhz === "number" ? ` \xB7 max ${String(Math.round(gpu.clockMaxMhz))} MHz` : ""}` : t("gpuClockUnavailable");
+  const gpuVramTitle = typeof gpu?.memoryUsedBytes === "number" && typeof gpu?.memoryTotalBytes === "number" ? `${formatBytes(gpu.memoryUsedBytes)} / ${formatBytes(gpu.memoryTotalBytes)}${typeof gpu.memoryPercent === "number" ? ` \xB7 ${formatShare(gpu.memoryPercent)}` : ""}` : t("gpuVramUnavailable");
+  const gpuName = typeof gpu?.name === "string" && gpu.name !== "" ? gpu.name : void 0;
+  const gpuTitle = [gpuName, gpuClockTitle, gpuVramTitle, gpu?.source].filter((part) => typeof part === "string" && part !== "").join("\n");
+  const gpuHidden = gpu?.status === "hidden";
   return (0, import_react.createElement)(
     "section",
     { className: "dsh-perfmon-card", "aria-label": t("resources") },
@@ -1191,7 +1249,8 @@ function GaugePanel(props) {
       warnings: reading?.warnings,
       measure: props.measure,
       t
-    })
+    }),
+    (0, import_react.createElement)(GpuPanel, { gpu, clock: gpuClock, vram: gpuVram, title: gpuTitle, hidden: gpu?.status === "hidden", t })
   );
 }
 

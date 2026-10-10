@@ -26,6 +26,7 @@
  */
 
 import { createScanController, DU_WARNINGS, resolveProjectDir } from './du.js'
+import { createGpuProbe, HIDDEN_GPU } from './gpu/index.js'
 import { createSampler } from './metrics.js'
 import { selectReader } from './readers/index.js'
 import { createTemperatureProbe, HIDDEN_TEMPERATURE } from './temperature/index.js'
@@ -70,6 +71,12 @@ const DEFAULTS = {
    * tracks a thermal trend perfectly well at a fraction of the cost.
    */
   temperatureIntervalMs: 15_000,
+  /**
+   * How long one GPU reading is reused. Unlike temperature, these figures move
+   * quickly while a model loads, so the probe follows the platform's main poll:
+   * 2s Linux, 3s macOS, 4s Windows.
+   */
+  gpuIntervalMs: null,
 }
 
 /**
@@ -81,7 +88,7 @@ const DEFAULTS = {
  * line entirely; unset follows the open sessions.
  * @param {object} [config] - the row's `config` block.
  * @param {string} platform - the reporting platform.
- * @returns {{refreshIntervalMs: number, processLimit: number, cacheMillis: number, sampleMillis: number, projectDir: string | null, projectDirHidden: boolean, projectDirEntryBudget: number, projectDirMaxDirs: number, temperatureHidden: boolean, temperatureIntervalMs: number}} resolved options.
+ * @returns {{refreshIntervalMs: number, processLimit: number, cacheMillis: number, sampleMillis: number, projectDir: string | null, projectDirHidden: boolean, projectDirEntryBudget: number, projectDirMaxDirs: number, temperatureHidden: boolean, temperatureIntervalMs: number, gpuHidden: boolean, gpuIntervalMs: number}} resolved options.
  */
 export function resolveConfig(config, platform) {
   const source = config ?? {}
@@ -94,12 +101,13 @@ export function resolveConfig(config, platform) {
     typeof source.projectDir === 'string' || typeof source.projectDir === 'boolean'
       ? source.projectDir
       : null
-  // `temperature: false` (or `''`) removes the card entirely, the same way the
-  // project-directory line is hidden — a machine whose sensors cost a helper call
-  // may reasonably want the feature off rather than merely calmer.
+  // `temperature: false` (or `''`) removes the temperature card entirely.
   const temperatureConfig = source.temperature
+  // `gpu: false` (or `''`) removes the GPU line entirely.
+  const gpuConfig = source.gpu
+  const refreshIntervalMs = positive(source.refreshIntervalMs, DEFAULT_REFRESH_MS[platform] ?? 4000, 500, 60000)
   return {
-    refreshIntervalMs: positive(source.refreshIntervalMs, DEFAULT_REFRESH_MS[platform] ?? 4000, 500, 60000),
+    refreshIntervalMs,
     processLimit: positive(source.processLimit, DEFAULTS.processLimit, 5, 500),
     cacheMillis: positive(source.cacheMillis, DEFAULTS.cacheMillis, 0, 10000),
     sampleMillis: positive(source.sampleMillis, DEFAULTS.sampleMillis, 0, 2000),
@@ -114,6 +122,8 @@ export function resolveConfig(config, platform) {
       2000,
       600000,
     ),
+    gpuHidden: gpuConfig === false || gpuConfig === '',
+    gpuIntervalMs: positive(source.gpuIntervalMs, refreshIntervalMs, 500, 60000),
   }
 }
 
@@ -215,8 +225,9 @@ function readOpenCwds(store) {
  * Every platform gets a reading: a dedicated reader for Linux, macOS and Windows,
  * and a `node:os`-only fallback elsewhere that answers what the standard library
  * can and marks the rest unavailable. Nothing here reports a fabricated zero, so
- * there is no "unsupported platform" failure to return — a platform that cannot
- * answer a field says so in `warnings` and leaves the field `null`.
+ * GPU and temperature fields are independent from the differenced metrics. The
+ * GPU probe serves cached values at the panel's refresh cadence; the temperature
+ * probe uses its slower thermal cadence. Neither can suppress a metrics reading.
  *
  * @param {import('@deepseek-ai/cordis').Context} ctx - host plugin context carrying `connection`.
  * @param {object} [config] - the row's `config` block.
@@ -227,6 +238,11 @@ export function apply(ctx, config) {
   const options = resolveConfig(config, platform)
   const reader = selectReader(platform)
   const sampler = createSampler({ sampleMillis: options.sampleMillis, cacheMillis: options.cacheMillis, reader })
+
+  // The GPU line is tied to the main polling cadence because VRAM usage is the
+  // useful signal while a model loads. Its own probe cache still prevents a
+  // second read inside one poll interval.
+  const gpuProbe = createGpuProbe({ intervalMs: options.gpuIntervalMs })
 
   // The temperature card reads on its own, much calmer cadence: it is an absolute
   // reading rather than a counter, and on Windows it costs a PowerShell call of a
@@ -264,8 +280,9 @@ export function apply(ctx, config) {
   // reverse, drains an in-flight sample after the route stops accepting
   // requests. The route's own registration is already owned by this fiber.
   ctx.effect(() => () => sampler.pending(), 'perfmon: drain in-flight sample')
-  // A temperature read in flight at unload is drained for the same reason: a
-  // PowerShell call left running would outlive the route that asked for it.
+  // The GPU probe's PowerShell call, if there is one, is drained on unload just
+  // like the metrics and temperature reads.
+  ctx.effect(() => () => gpuProbe.pending(), 'perfmon: drain in-flight GPU read')
   ctx.effect(() => () => temperatureProbe.pending(), 'perfmon: drain in-flight temperature read')
   // Unloading the plugin stops a running scan first: a fiber teardown must not
   // leave a walk running against a dead route.
@@ -330,6 +347,27 @@ export function apply(ctx, config) {
             warnings: ['temperature-unavailable'],
           }
         }
+        // The GPU line is part of the live snapshot. Its own probe cache prevents
+        // work inside the refresh interval; keep the GPU failure isolated so it
+        // can never hide CPU/memory/process data.
+        let gpu
+        try {
+          gpu = options.gpuHidden ? HIDDEN_GPU : await gpuProbe.read()
+        } catch (error) {
+          ctx.logger?.warn?.('perfmon: GPU read failed: %s', error?.message ?? String(error))
+          gpu = {
+            status: 'unavailable',
+            at: null,
+            source: null,
+            name: null,
+            clockMhz: null,
+            clockMaxMhz: null,
+            memoryUsedBytes: null,
+            memoryTotalBytes: null,
+            memoryPercent: null,
+            warnings: ['gpu-unavailable'],
+          }
+        }
         let disk
         try {
           disk = options.projectDirHidden
@@ -357,12 +395,14 @@ export function apply(ctx, config) {
           value: {
             ...reading,
             disk,
+            gpu,
             temperature,
             // A hidden card contributes no warning: the user asked for it to be
             // absent, so there is nothing to explain.
             warnings: [
               ...(reading.warnings ?? []),
               ...disk.warnings,
+              ...(options.gpuHidden ? [] : gpu.warnings),
               ...(options.temperatureHidden ? [] : temperature.warnings),
             ],
             refreshIntervalMs: options.refreshIntervalMs,

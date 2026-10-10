@@ -263,6 +263,14 @@ test('the project-folder options resolve defensively like the rest', () => {
   // on Windows — so the expectation goes through the same resolver.
   assert.equal(resolveConfig({ projectDir: '/elsewhere' }, 'linux').projectDir, resolvePath('/elsewhere'))
   assert.equal(resolveConfig({ projectDir: '/elsewhere' }, 'linux').projectDirHidden, false)
+  assert.equal(defaults.gpuHidden, false)
+  assert.equal(resolveConfig({ gpu: false }, 'win32').gpuHidden, true)
+  assert.equal(resolveConfig({ gpu: '' }, 'linux').gpuHidden, true)
+  assert.equal(resolveConfig({ gpu: 0 }, 'win32').gpuHidden, false, 'only explicit false or empty string hides GPU')
+  assert.equal(defaults.gpuIntervalMs, defaults.refreshIntervalMs, 'GPU follows the panel poll by default')
+  assert.equal(resolveConfig({ refreshIntervalMs: 1000 }, 'linux').gpuIntervalMs, 1000)
+  assert.equal(resolveConfig({ gpuIntervalMs: 7000 }, 'win32').gpuIntervalMs, 7000)
+  assert.equal(resolveConfig({ gpuIntervalMs: -10 }, 'win32').gpuIntervalMs, 500)
 })
 
 test('a named session resolves its workspace from the live store first', async () => {

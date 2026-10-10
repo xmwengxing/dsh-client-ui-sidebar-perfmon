@@ -24,11 +24,13 @@ const {
   PerfmonBody,
   ProcessPanel,
   GaugePanel,
+  GpuPanel,
   DiskPanel,
   TemperaturePanel,
   TEMPERATURE_TILES,
   TEMPERATURE_TONES,
   temperatureTone,
+  formatBytesCompact,
   HeaderButton,
   GAUGE_RING,
   createTranslator,
@@ -88,6 +90,11 @@ function readingFixture(overrides = {}) {
     facts: { hostname: 'host-a', arch: 'x64', coreCount: 4, uptimeSeconds: 7200 },
     window: { millis: 2000, at: 1700000000000 },
     cpu: { percent: 12.5, coreCount: 4, cores: [], loadAverage: [0.5, 0.4, 0.3] },
+    gpu: {
+      status: 'ready', at: 1700000000000, source: 'nvidia-smi', name: 'NVIDIA RTX',
+      clockMhz: 1500, clockMaxMhz: 2000, memoryUsedBytes: 4 * 1024 ** 3,
+      memoryTotalBytes: 8 * 1024 ** 3, memoryPercent: 50, warnings: [],
+    },
     memory: {
       total: 16 * 1024 ** 3,
       used: 8 * 1024 ** 3,
@@ -193,6 +200,60 @@ test('the resource window shows one gauge each for CPU, memory and swap', async 
   assert.match(details[0], /4 核/)
   assert.match(details[1], /8\.0 GB \/ 16\.0 GB/)
   assert.match(details[2], /1\.0 GB \/ 4\.0 GB/)
+})
+
+test('the resource card shows one compact GPU line below the project folder', async (context) => {
+  const reading = readingFixture({
+    disk: {
+      projectDir: '/srv/demo',
+      projectDirs: [{ dir: '/srv/demo', bytes: 1024, entries: 1, truncated: false, warnings: [] }],
+      projectBytes: 1024,
+      projectEntries: 1,
+      projectTruncated: false,
+      droppedDirCount: 0,
+      warnings: [],
+      status: 'done',
+    },
+    warnings: [],
+  })
+  const renderer = await mount(context, React.createElement(GaugePanel, { reading, t }))
+  const row = renderer.root.findByProps({ className: 'dsh-perfmon-gpuRow' })
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuLabel'), ['显卡'])
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuClock'), ['1500 MHz'])
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuVram'), ['显存 4.0GB / 8.0GB'])
+  assert.match(row.props.title, /NVIDIA RTX/)
+  assert.match(row.props.title, /max 2000 MHz/)
+  assert.match(row.props.title, /50%/)
+  assert.deepEqual(
+    renderer.root.findAll((node) => node.props.className === 'dsh-perfmon-disk' || node.props.className === 'dsh-perfmon-gpuRow').map((node) => node.props.className),
+    ['dsh-perfmon-disk', 'dsh-perfmon-gpuRow'],
+    'the GPU line sits directly beneath the project-folder line',
+  )
+})
+
+test('GPU with VRAM but no frequency still shows the portable figure and a dash for clock', async (context) => {
+  const reading = readingFixture({
+    gpu: {
+      status: 'ready', source: 'windows-counters', name: 'AMD Radeon',
+      clockMhz: null, clockMaxMhz: null,
+      memoryUsedBytes: 2 * 1024 ** 3, memoryTotalBytes: 16 * 1024 ** 3,
+      memoryPercent: 12.5, warnings: ['gpu-clock-unavailable'],
+    },
+  })
+  const renderer = await mount(context, React.createElement(GaugePanel, { reading, t }))
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuClock'), ['频率 —'])
+  assert.deepEqual(textsOf(renderer, 'dsh-perfmon-gpuVram'), ['显存 2.0GB / 16.0GB'])
+})
+
+test('hidden or legacy hosts do not render the GPU line', async (context) => {
+  const hidden = await mount(context, React.createElement(GaugePanel, {
+    reading: readingFixture({ gpu: { status: 'hidden' } }), t,
+  }))
+  assert.equal(hidden.root.findAllByProps({ className: 'dsh-perfmon-gpuRow' }).length, 0)
+  const legacy = await mount(context, React.createElement(GaugePanel, { reading: readingFixture({ gpu: undefined }), t }))
+  assert.equal(legacy.root.findAllByProps({ className: 'dsh-perfmon-gpuRow' }).length, 1)
+  assert.deepEqual(textsOf(legacy, 'dsh-perfmon-gpuClock'), ['频率 —'])
+  assert.deepEqual(textsOf(legacy, 'dsh-perfmon-gpuVram'), ['显存 —'])
 })
 
 test('the resource window carries the project-folder line', async (context) => {

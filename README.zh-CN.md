@@ -116,6 +116,8 @@ dsh --profile web --dump-config | grep -A2 perfmon
     projectDirEntryBudget: 50000   # 100–1000000，单个目录一次扫描的条目上限
     projectDirMaxDirs: 12          # 1–100，一次扫描覆盖的 distinct 目录数
     temperatureIntervalMs: 15000   # 2000–600000，一次温度读数的复用时长
+    gpuIntervalMs: 4000            # 500–60000，默认跟随 refreshIntervalMs
+    # gpu: false                   # 完全隐藏显卡行
     # temperature: false           # 完全隐藏温度卡片
     # projectDir: /srv/demo        # 固定扫描某个目录，而不是跟随当前查看的会话
     # projectDir: ''               # 或完全隐藏目录大小行
@@ -183,6 +185,31 @@ session-query 服务读取冷记录的 cwd。扫描进行中按钮变为“停�
 读数一直保留到下次扫描替换为止。常规轮询只读存储结果——面板开着在两次扫描之间
 零开销。扫描有上限（单目录 5 万条目、单次 12 个目录）、符号链接既不跟随也不计入，
 每一处省略都在数字旁说明，而不是默默夸大准确性。
+
+### 显卡频率与显存
+
+显卡行刻意是**不对称**的：显存几乎总能读到，频率常常读不到，面板会说明哪个是哪个，
+而不是编一个数字出来。
+
+| 读数 | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| 显存 已用/总量 | `amdgpu` 的 sysfs（`mem_info_vram_*`）；`nvidia-smi` | 仅 `nvidia-smi` | 系统自带的 `GPUPerformanceCounters` 内存计数器（**任何厂商都行，无需安装任何软件**），加上注册表中 64 位的适配器总量；有 `nvidia-smi` 时用它的 |
+| 核心频率 | `gt_cur_freq_mhz`（i915）或 `amdgpu` 的 `pp_dpm_sclk`；`nvidia-smi` | 仅 `nvidia-smi` | `nvidia-smi`（NVIDIA），或运行中的 LibreHardwareMonitor / OpenHardwareMonitor（其它厂商） |
+
+由上表得出两条规则：
+
+- **显存不需要任何第三方软件。** Windows 自身就会为 NVIDIA、AMD、Intel 报告专用显存
+  占用，而真实的 64 位总量来自显示类注册表键——刻意**不用**
+  `Win32_VideoController.AdapterRAM`，那是 32 位字段，超过 4 GiB 会回绕（本机这块
+  11 GiB 的卡在那里报的是 4293918720 字节）。
+- **Windows 没有系统级的频率来源。** 计数器集合只有显存占用与利用率，没有频率字段，
+  因此一台既没有 `nvidia-smi` 也没有硬件监控软件的机器，频率显示 `—` 而显存照常读数。
+  用猜出来的最大频率去编一个百分比，正是本插件在别处一直避免的那种「看起来确定、
+  其实没有意义」的数字。
+
+这一行是一行文字，不是两个同心圆环：频率和字节数没有共同的刻度，圆环会暗示存在一个
+共同刻度。它复用面板自身的刷新节奏（`gpuIntervalMs`，默认跟随 `refreshIntervalMs`），
+因为加载模型时显存才是关键指标。设 `gpu: false` 可隐藏该行。
 
 ### 温度
 
