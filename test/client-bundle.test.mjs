@@ -271,3 +271,31 @@ test('every colour in the sheet resolves through a design token', async () => {
   assert.equal(module.SNAPSHOT_PATH, '/api/perfmon.snapshot')
   assert.equal(module.AWAKE_PATH, '/api/perfmon.awake')
 })
+
+test('the panel scrolls as a whole while the process list keeps its own scroll', async () => {
+  await loadClientBundle()
+  const source = await readFile(resolve(root, 'client/client.js'), 'utf8')
+  const sheet = source.slice(source.indexOf('.dsh-perfmon-root'))
+  // A rule's body, taken from its selector to the first closing brace — never
+  // by slicing between selectors, whose order across shared class names (.dsh-
+  // perfmon-row serves both cards) is not something the test should lean on.
+  const body = (selector) => {
+    const at = sheet.indexOf(`${selector} {`)
+    return at < 0 ? '' : sheet.slice(at, sheet.indexOf('}', at))
+  }
+
+  // The root is the page's scrollport: vertical scrolling is what makes a
+  // short pane reachable; horizontal stays clipped so no sideways bar appears.
+  const rootRule = body('.dsh-perfmon-root')
+  assert.match(rootRule, /overflow-y:\s*auto/)
+  assert.match(rootRule, /overflow-x:\s*hidden/)
+
+  // The list card keeps a working floor, so a cramped pane scrolls the page
+  // rather than presenting a one-row list nobody can read.
+  const listRule = body('.dsh-perfmon-card--processes')
+  assert.match(listRule, /min-block-size:\s*360px/)
+
+  // …and the rows keep their own scroll — the two scrollports are independent.
+  const rowsRule = body('.dsh-perfmon-rows')
+  assert.match(rowsRule, /overflow-y:\s*auto/)
+})

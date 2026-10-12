@@ -346,7 +346,14 @@ var STYLES = `
   box-sizing: border-box;
   font: var(--dsw-font-xs-13, 400 13px/1.5 var(--dsw-font-family, system-ui));
   color: var(--dsw-alias-label-primary, currentColor);
-  overflow: hidden;
+  /* The pane is a fixed-height box: with clipping here, anything below the
+     fold on a short display was simply unreachable. The page itself scrolls
+     vertically while the process card keeps its own inner scroll \u2014 two
+     independent scrollports. Horizontal stays hidden: no axis has content
+     that wants to be seen sideways, and an auto pairing is what once
+     produced a second, empty bar. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .dsh-perfmon-card {
@@ -362,9 +369,12 @@ var STYLES = `
 }
 
 .dsh-perfmon-card--processes {
-  /* The one card that takes the leftover height, and scrolls inside it. */
+  /* The one card that takes the leftover height, and scrolls inside it. The
+     floor is a working height, not a survivable minimum: it is what the page
+     has to scroll on a short display instead of presenting a one-row list.
+     On a tall pane the flex still grows it to fill, so nothing changes there. */
   flex: 1 1 auto;
-  min-block-size: 96px;
+  min-block-size: 360px;
   overflow: hidden;
   /* The two fixed metric tracks, declared once for the header and the rows.
      "1024.0%" needs 54px; "999.9 MB \xB7 99%" needs 88px. */

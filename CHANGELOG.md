@@ -26,12 +26,24 @@
 - **The client follows the host.** The toggle's reply is authoritative until the
   next snapshot confirms it, and two consecutive fresh disagreements (a second
   tab, a dead holder) hand the state back to the server.
-- Tests: 173 specs (17 new — the three platform holder commands and their
+- **The whole panel scrolls on a short display, independent of the process
+  list's own scroll.** The root used to clip (`overflow: hidden`), so on a
+  device without vertical room everything below the fold — the footer, half
+  the list — was simply unreachable. The root is now the page's scrollport
+  (`overflow-y: auto`, horizontal clipped), and the list card keeps a working
+  360px floor instead of a survivable 96px one: a cramped pane scrolls the
+  page while the rows still scroll inside the card, each `scrollTop` without
+  effect on the other. On a tall pane nothing changes — the card grows to
+  fill and the footer sits at the bottom, exactly the layout the README hero
+  shows.
+- Tests: 174 specs (18 new — the three platform holder commands and their
   Windows quoting invariants, the event-ring cap, both failure paths, route
-  registration / toggling / 400s, and the footer button's states). Browser-
-  verified against a live Windows host: click → the holder appears in the real
-  process table → click → it is gone, with the footer geometry checked at
-  1680 px.
+  registration / toggling / 400s, the footer button's states, and the
+  two-scrollports sheet invariants). Browser-verified against a live Windows
+  host: click → the holder appears in the real process table → click → it is
+  gone (footer geometry at 1680 px), and on a 600px-tall pane both
+  scrollports move independently while a 1050px pane shows the original
+  no-page-scroll layout.
 
 ## 0.4.2
 

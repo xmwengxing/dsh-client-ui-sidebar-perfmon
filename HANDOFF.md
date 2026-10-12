@@ -21,7 +21,7 @@ button.
 | Source version | **0.4.2** |
 | Published on npm | 0.2.0, 0.2.2, 0.3.1, 0.3.2, 0.4.0 — public, zero runtime dependencies |
 | GitHub Releases | v0.1.0 … v0.4.0 (latest; carries the version-free tarball) |
-| Tests | 173 specs across 10 files, green on Windows (170 pass / 3 linux-only skips) and Linux |
+| Tests | 174 specs across 10 files, green on Windows (171 pass / 3 linux-only skips) and Linux |
 | Community list | [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984) — submitted, both checks green, awaiting a maintainer read |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
@@ -68,7 +68,7 @@ Relative to the repository root.
 | `src/client/api.js` | 89 | `fetchSnapshot()` + `setKeepAwake()` over the two host routes. Exports `SNAPSHOT_PATH`, `AWAKE_PATH`. |
 | `src/client/copy.js` | 339 | zh/en dictionaries, language resolution, warning translation (incl. `awakeReason` hold-failure reasons). No locale service dependency. |
 | `src/client/format.js` | 106 | Byte/percent/duration/clock/temperature formatting; `formatShare` for whole-percent cells. |
-| `src/client/styles.js` | 786 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
+| `src/client/styles.js` | 796 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
 | `client/client.js` | built | Bundled browser half, wrapped in the `window.__ModuleLoader__.load` envelope. **Committed.** |
 
 ### Build, tests, docs, tooling
@@ -81,7 +81,8 @@ Relative to the repository root.
 | `scripts/build-test-bundle.mjs` | 36 | Test-only CJS bundle of the internals, so specs can mount components without widening the published API. |
 | `scripts/verify-ui.mjs` | 416 | Drives a real Chromium over the DevTools protocol against a running instance: guide entry, gauges, live refresh, tag sorting, filter, header button. `PERFMON_CLIP='x,y,w,h@scale'` clips the final capture (the README hero is `925,38,755,1012@2`, scrolled to top first). |
 | `scripts/verify-awake.mjs` | 317 | The keep-awake toggle end to end: footer button states, the real OS holder counted from Windows' process table (0 → 1 held → 0 released), footer geometry at 1680 px; writes `test/.build/awake-0{1,2,3}-*.png`. |
-| `test/client-bundle.test.mjs` | 273 | Loads the shipped bundle like the module loader does; asserts registrations, that every component renders from its own inject face, and that no bare colour escapes a `var()`. |
+| `scripts/verify-scroll.mjs` | 307 | The two independent scrollports end to end: short pane (page scroll accepted, 360px list floor held, footer reachable) and tall-pane regression (no page scroll, card grows), inner/outer `scrollTop` independence; writes `test/.build/scroll-short-{top,bottom}.png`. |
+| `test/client-bundle.test.mjs` | 301 | Loads the shipped bundle like the module loader does; asserts registrations, that every component renders from its own inject face, that no bare colour escapes a `var()`, and the two-scrollports sheet invariants (page scroll, 360px floor, inner scroll). |
 | `test/contract.test.mjs` | 192 | Re-reads the **installed** dsh packages to confirm slot names, service names, the route rule (for `SNAPSHOT_PATH` *and* `AWAKE_PATH`), and the bundle id still hold. Catches upstream renames. |
 | `test/gpu.test.mjs` | 246 | GPU probe specs: per-platform parsers, `memoryPercent`, source selection, and the cache at the panel's cadence. |
 | `test/keep-awake.test.mjs` | 273 | 10 specs: the three holder commands and their Windows quoting invariants, the event-ring cap, unsupported / failed / exited holders, spawn throw, idempotent dispose. |
@@ -286,7 +287,11 @@ node scripts/verify-ui.mjs "http://127.0.0.1:3099/?token=<token>" /tmp/panel.png
 #    Windows process table (baseline → +1 while held → baseline again).
 node scripts/verify-awake.mjs "http://127.0.0.1:3099/?token=<token>" test/.build
 
-# 5. The README hero (right sidebar only, 2×) — LHM must be running first, and
+# 5. The two independent scrollports: short pane (page scroll accepted, list
+#    floor held, footer reachable) and tall-pane regression (no page scroll).
+node scripts/verify-scroll.mjs "http://127.0.0.1:3099/?token=<token>" test/.build
+
+# 6. The README hero (right sidebar only, 2×) — LHM must be running first, and
 #    its WMI namespace appears only ~15 s after the process starts.
 PERFMON_CLIP='925,38,755,1012@2' node scripts/verify-ui.mjs --attach assets/screenshot-panel.png
 ```
@@ -579,8 +584,8 @@ Read this section before editing. Every item below was an actual failure.
    the 6 contract specs need `DSH_CLI_ROOT` pointing at the installed
    `@deepseek-ai/dsh` (set it to
    `%APPDATA%\npm\node_modules\@deepseek-ai\dsh`), and the suite is **green on
-   both platforms** — Windows: 173 tests / 170 pass / 0 fail / 3 skipped (the
-   skips are the `process.platform !== 'linux'` guards); Linux: 173 / 173 / 0 / 0.
+   both platforms** — Windows: 174 tests / 171 pass / 0 fail / 3 skipped (the
+   skips are the `process.platform !== 'linux'` guards); Linux: 174 / 174 / 0 / 0.
    It used to be red on Windows by default (17 path-separator failures), which
    made a real regression indistinguishable from known noise; that is fixed, so a
    red run now means something.
