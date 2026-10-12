@@ -26,6 +26,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   AWAKE_PATH: () => AWAKE_PATH,
+  LHM_PATH: () => LHM_PATH,
   PERFMON_KIND: () => PERFMON_KIND,
   PERFMON_TYPE_ID: () => PERFMON_TYPE_ID,
   SNAPSHOT_PATH: () => SNAPSHOT_PATH,
@@ -112,6 +113,35 @@ var ZH = {
     "hold-failed": "\u9632\u7761\u7720\u672A\u80FD\u751F\u6548\uFF0C\u5DF2\u81EA\u52A8\u5173\u95ED",
     "holder-exited": "\u9632\u7761\u7720\u8FDB\u7A0B\u5DF2\u9000\u51FA\uFF0C\u53EF\u91CD\u65B0\u5F00\u542F"
   },
+  // The temperature card's one-click LibreHardwareMonitor assist. The state
+  // drives which label the title-bar pill shows; the hints carry the UAC
+  // warning, because that prompt appears on the HOST's screen — a remote
+  // viewer of this panel is exactly who cannot see it.
+  lhmInstall: "\u5B89\u88C5 LHM",
+  lhmStart: "\u542F\u52A8 LHM",
+  lhmInstalling: "\u5B89\u88C5\u4E2D\u2026",
+  lhmStarting: "\u542F\u52A8\u4E2D\u2026",
+  lhmManual: "\u624B\u52A8\u4E0B\u8F7D LHM",
+  lhmHintInstall: "\u4E00\u952E\u5B89\u88C5 LibreHardwareMonitor \u5E76\u542F\u52A8\u2014\u2014\u8FC7\u7A0B\u4E2D\u53EF\u80FD\u5728\u4E3B\u673A\u5C4F\u5E55\u4E0A\u5F39\u51FA\u6388\u6743\uFF08UAC\uFF09\uFF0C\u8BF7\u5230\u4E3B\u673A\u4E0A\u786E\u8BA4",
+  lhmHintStart: "\u542F\u52A8 LibreHardwareMonitor \u4EE5\u8BFB\u53D6 CPU \u6E29\u5EA6\u2014\u2014\u53EF\u80FD\u5728\u4E3B\u673A\u5C4F\u5E55\u4E0A\u5F39\u51FA\u6388\u6743\uFF08UAC\uFF09\uFF0C\u8BF7\u5230\u4E3B\u673A\u4E0A\u786E\u8BA4",
+  lhmHintStarting: "\u5DF2\u53D1\u8D77\u542F\u52A8\uFF0C\u6B63\u5728\u7B49\u5F85\u4F20\u611F\u5668\u4E0A\u7EBF\u2026",
+  lhmError: "LHM \u64CD\u4F5C\u5931\u8D25",
+  lhmManualHint: "\u5BBF\u4E3B\u673A\u7F3A\u5C11 winget\uFF0C\u8BF7\u5230\u5B98\u65B9\u53D1\u5E03\u9875\u624B\u52A8\u4E0B\u8F7D LibreHardwareMonitor",
+  lhmReason: {
+    "winget-unavailable": "\u5BBF\u4E3B\u673A\u7F3A\u5C11 winget\uFF08App Installer\uFF09\uFF0C\u65E0\u6CD5\u81EA\u52A8\u5B89\u88C5",
+    "exe-not-found": "\u627E\u4E0D\u5230 LibreHardwareMonitor \u53EF\u6267\u884C\u6587\u4EF6",
+    "elevation-declined": "\u6388\u6743\u88AB\u53D6\u6D88\u2014\u2014UAC \u5F39\u7A97\u9700\u8981\u5728\u4E3B\u673A\u5C4F\u5E55\u4E0A\u786E\u8BA4",
+    "already-running-unreadable": "LHM \u6B63\u5728\u8FD0\u884C\u4F46\u672A\u5F00\u653E\u4F20\u611F\u5668\u2014\u2014\u8BF7\u4EE5\u7BA1\u7406\u5458\u8EAB\u4EFD\u8FD0\u884C\uFF0C\u6216\u68C0\u67E5\u5176 WMI \u8BBE\u7F6E",
+    "install-failed": "\u81EA\u52A8\u5B89\u88C5\u5931\u8D25",
+    "start-failed": "\u542F\u52A8\u5931\u8D25",
+    "powershell-missing": "\u672A\u627E\u5230 PowerShell\uFF0C\u65E0\u6CD5\u542F\u52A8",
+    "state-unknown": "\u6682\u65F6\u65E0\u6CD5\u786E\u8BA4 LHM \u72B6\u6001\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
+    busy: "\u4E0A\u4E00\u4E2A\u64CD\u4F5C\u5C1A\u672A\u5B8C\u6210",
+    unsupported: "\u5F53\u524D\u5E73\u53F0\u4E0D\u652F\u6301\u8BE5\u64CD\u4F5C",
+    "bad-action": "\u672A\u77E5\u64CD\u4F5C",
+    "action-failed": "\u64CD\u4F5C\u5F02\u5E38\u4E2D\u65AD",
+    timeout: "\u64CD\u4F5C\u8D85\u65F6\u2014\u2014\u82E5\u4E3B\u673A\u5C4F\u5E55\u4E0A\u5F39\u51FA\u4E86\u6388\u6743\u7A97\u53E3\uFF0C\u8BF7\u5230\u4E3B\u673A\u4E0A\u786E\u8BA4"
+  },
   loading: "\u6B63\u5728\u8BFB\u53D6\u4E3B\u673A\u6307\u6807\u2026",
   empty: "\u6CA1\u6709\u5339\u914D\u7684\u8FDB\u7A0B",
   emptyAll: "\u6CA1\u6709\u8BFB\u5230\u8FDB\u7A0B\u4FE1\u606F",
@@ -155,7 +185,7 @@ var ZH = {
     "project-dir-dropped": "\u6D3B\u8DC3\u5DE5\u4F5C\u533A\u76EE\u5F55\u8FC7\u591A\uFF0C\u4EC5\u7EDF\u8BA1\u5176\u4E2D\u4E00\u90E8\u5206",
     "temperature-hidden": "\u6E29\u5EA6\u5361\u7247\u5DF2\u5728\u914D\u7F6E\u4E2D\u5173\u95ED",
     "temperature-unavailable": "\u672C\u673A\u6CA1\u6709\u53EF\u8BFB\u53D6\u7684\u6E29\u5EA6\u4F20\u611F\u5668",
-    "temperature-cpu-unavailable": "CPU \u6E29\u5EA6\u4E0D\u53EF\u8BFB\u2014\u2014Windows \u4E0A\u9700\u8FD0\u884C\u786C\u4EF6\u76D1\u63A7\u8F6F\u4EF6\uFF08\u5982 LibreHardwareMonitor\uFF09\uFF0C\u9762\u677F\u4F1A\u81EA\u52A8\u8BC6\u522B",
+    "temperature-cpu-unavailable": "CPU \u6E29\u5EA6\u4E0D\u53EF\u8BFB\u2014\u2014Windows \u4E0A\u9700\u8FD0\u884C LibreHardwareMonitor\uFF0C\u53EF\u7528\u6807\u9898\u680F\u7684\u201C\u5B89\u88C5 LHM / \u542F\u52A8 LHM\u201D\u6309\u94AE\u4E00\u952E\u5904\u7406",
     "temperature-gpu-unavailable": "\u663E\u5361\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
     "temperature-mainboard-unavailable": "\u4E3B\u677F\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
     "temperature-disk-unavailable": "\u786C\u76D8\u6E29\u5EA6\u4E0D\u53EF\u8BFB",
@@ -246,6 +276,35 @@ var EN = {
     "hold-failed": "The hold never took effect and was switched off",
     "holder-exited": "The keep-awake process exited; you can start it again"
   },
+  // The temperature card's one-click LibreHardwareMonitor assist: the state
+  // picks the title-bar pill's label, and the hints carry the UAC warning —
+  // that prompt appears on the HOST's screen, so a remote viewer of this
+  // panel is exactly who cannot see it.
+  lhmInstall: "Install LHM",
+  lhmStart: "Start LHM",
+  lhmInstalling: "Installing\u2026",
+  lhmStarting: "Starting\u2026",
+  lhmManual: "Download LHM manually",
+  lhmHintInstall: "Install LibreHardwareMonitor and start it \u2014 a UAC prompt may appear on the HOST screen during install or start; approve it there",
+  lhmHintStart: "Start LibreHardwareMonitor to read the CPU temperature \u2014 a UAC prompt may appear on the HOST screen; approve it there",
+  lhmHintStarting: "Launch requested; waiting for the sensors to come online\u2026",
+  lhmError: "LHM action failed",
+  lhmManualHint: "This host has no winget; download LibreHardwareMonitor from the official releases page",
+  lhmReason: {
+    "winget-unavailable": "winget (App Installer) is missing on the host, so it cannot be installed automatically",
+    "exe-not-found": "No LibreHardwareMonitor executable was found",
+    "elevation-declined": "Authorization was declined \u2014 the UAC prompt must be answered on the host screen",
+    "already-running-unreadable": "LHM is running but exposes no sensors; run it as administrator or check its WMI setting",
+    "install-failed": "Automatic installation failed",
+    "start-failed": "The launch failed",
+    "powershell-missing": "PowerShell was not found, so it cannot be started",
+    "state-unknown": "The LHM state is not currently known; try again shortly",
+    busy: "The previous action is still running",
+    unsupported: "This platform does not support the action",
+    "bad-action": "Unknown action",
+    "action-failed": "The action stopped unexpectedly",
+    timeout: "The action timed out \u2014 if a prompt appeared, answer it on the host screen"
+  },
   loading: "Reading host metrics\u2026",
   empty: "No process matches the filter",
   emptyAll: "No process information available",
@@ -289,7 +348,7 @@ var EN = {
     "project-dir-dropped": "More open workspaces than one scan covers; only some were measured",
     "temperature-hidden": "The temperature card is disabled in the configuration",
     "temperature-unavailable": "This host exposes no readable temperature sensor",
-    "temperature-cpu-unavailable": "CPU temperature is unreadable \u2014 on Windows this needs a hardware monitor such as LibreHardwareMonitor running, which the panel picks up automatically",
+    "temperature-cpu-unavailable": "CPU temperature is unreadable \u2014 on Windows this needs LibreHardwareMonitor; use the title-bar Install LHM / Start LHM button",
     "temperature-gpu-unavailable": "GPU temperature is unreadable",
     "temperature-mainboard-unavailable": "Motherboard temperature is unreadable",
     "temperature-disk-unavailable": "Drive temperature is unreadable",
@@ -955,7 +1014,24 @@ var STYLES = `
    footer action that is currently doing something to the machine. */
 .dsh-perfmon-awakeOn {
   border-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  color: var(--dsh-alias-brand-primary, #4f6ef7);
+}
+
+/* The temperature card's one-click monitor assist. The pill marks the pending
+   state (installing / starting) in the accent colour while a click is in
+   flight, so the title bar itself says the action is running. */
+.dsh-perfmon-lhm {
+  border-color: var(--dsw-alias-brand-primary, #4f6ef7);
   color: var(--dsw-alias-brand-primary, #4f6ef7);
+}
+
+/* The manual-download fallback for a host without winget: the one path the
+   button cannot take, offered as a link instead. */
+.dsh-perfmon-lhmLink {
+  font-size: 11px;
+  align-self: center;
+  color: var(--dsw-alias-brand-primary, #4f6ef7);
+  text-decoration: underline;
 }
 
 .dsh-perfmon-notice {
@@ -1148,6 +1224,10 @@ async function fetchSnapshot(request = {}) {
 }
 async function setKeepAwake(on, options = {}) {
   return postJson(AWAKE_PATH, { on: on === true }, options.signal);
+}
+var LHM_PATH = "/api/perfmon.lhm";
+async function assistLhm(action, options = {}) {
+  return postJson(LHM_PATH, { action: String(action) }, options.signal);
 }
 
 // src/client/GaugePanel.jsx
@@ -1779,6 +1859,8 @@ var TEMPERATURE_TILES = [
   { kind: "mainboard", key: "temperatureMainboard" },
   { kind: "disk", key: "temperatureDisk" }
 ];
+var LHM_ACTION_TIMEOUT_MS = 9e4;
+var LHM_MANUAL_URL = "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases";
 var TEMPERATURE_TONES = { warm: 70, hot: 85 };
 function temperatureTone(celsius) {
   if (typeof celsius !== "number" || !Number.isFinite(celsius)) return "unknown";
@@ -1802,7 +1884,90 @@ function tileTitle(group, warnings, kind, t) {
   }
   return lines.length > 0 ? lines.join("\n") : void 0;
 }
-function TemperaturePanel({ reading, t }) {
+function LhmAssist({ lhm, t, assist }) {
+  const [pending, setPending] = (0, import_react3.useState)(null);
+  const [failure, setFailure] = (0, import_react3.useState)(null);
+  const timeoutRef = (0, import_react3.useRef)(null);
+  (0, import_react3.useEffect)(() => () => {
+    if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
+  }, []);
+  const lhmState = lhm?.state ?? null;
+  (0, import_react3.useEffect)(() => {
+    if (lhmState === "running" && pending !== null) setPending(null);
+  }, [lhmState, pending]);
+  if (lhm === null || lhmState === null || lhmState === "running") return null;
+  const action = lhmState === "missing" ? "install" : "start";
+  const label = pending === "install" ? t("lhmInstalling") : pending === "start" ? t("lhmStarting") : action === "install" ? t("lhmInstall") : t("lhmStart");
+  const hint = pending === "start" ? t("lhmHintStarting") : action === "install" ? t("lhmHintInstall") : t("lhmHintStart");
+  const reasonText = failure === null ? null : failure.reason === "timeout" ? t("lhmReason.timeout") : t(`lhmReason.${failure.reason}`) || failure.reason;
+  const tooltip = [
+    hint,
+    failure === null ? null : `${t("lhmError")}: ${reasonText}`,
+    failure?.detail ?? null
+  ].filter((part) => typeof part === "string" && part !== "").join("\n");
+  const run = () => {
+    if (pending !== null) return;
+    setFailure(null);
+    setPending(action);
+    const id = setTimeout(() => {
+      timeoutRef.current = null;
+      setPending(null);
+      setFailure({ reason: "timeout", detail: void 0 });
+    }, LHM_ACTION_TIMEOUT_MS);
+    id.unref?.();
+    timeoutRef.current = id;
+    assist(action).then((reply) => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (typeof reply?.reason === "string" && reply.reason !== "") {
+        setFailure({ reason: reply.reason, detail: reply.detail });
+        setPending(null);
+        return;
+      }
+      if (reply?.state !== "starting") setPending(null);
+    }).catch((error) => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      setFailure({ reason: "action-failed", detail: String(error?.message ?? error) });
+      setPending(null);
+    });
+  };
+  return [
+    (0, import_react3.createElement)(
+      "button",
+      {
+        key: "lhm-action",
+        type: "button",
+        className: "dsh-perfmon-action dsh-perfmon-lhm",
+        disabled: pending !== null,
+        "aria-busy": pending !== null ? "true" : void 0,
+        title: tooltip,
+        onClick: run
+      },
+      label
+    ),
+    // The one dead end left: a host without winget. The button stays (retrying
+    // is pointless while winget is absent, so it is disabled by the state it
+    // gets back), and the link does what a button on this machine cannot.
+    failure?.reason === "winget-unavailable" ? (0, import_react3.createElement)(
+      "a",
+      {
+        key: "lhm-manual",
+        className: "dsh-perfmon-lhmLink",
+        href: LHM_MANUAL_URL,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        title: t("lhmManualHint")
+      },
+      t("lhmManual")
+    ) : null
+  ];
+}
+function TemperaturePanel({ reading, t, assist = assistLhm }) {
   const temperature = reading?.temperature;
   if (temperature == null) return null;
   if (temperature.status === "hidden") return null;
@@ -1815,6 +1980,10 @@ function TemperaturePanel({ reading, t }) {
       "div",
       { className: "dsh-perfmon-cardHead" },
       (0, import_react3.createElement)("span", { className: "dsh-perfmon-cardTitle" }, t("temperatures")),
+      // The pill sits next to the title — a title-bar control, not a tile
+      // overlay: the tiles stay purely data, and the meta (with its
+      // margin-inline-start: auto) still lands at the far right.
+      (0, import_react3.createElement)(LhmAssist, { lhm: temperature.lhm ?? null, t, assist }),
       // The source is what makes a temperature trustworthy, and it is the one
       // thing the tiles cannot show: it says where the numbers came from.
       (0, import_react3.createElement)(

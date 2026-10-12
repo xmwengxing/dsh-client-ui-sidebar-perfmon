@@ -102,6 +102,7 @@ export const HIDDEN_TEMPERATURE = {
   status: 'hidden',
   at: null,
   source: null,
+  lhm: null,
   groups: { cpu: null, gpu: null, mainboard: null, disk: null },
   warnings: ['temperature-hidden'],
 }
@@ -148,6 +149,12 @@ export function createTemperatureProbe(options = {}) {
       status: answered.length > 0 ? 'ready' : 'unavailable',
       at: now(),
       source: typeof result?.source === 'string' ? result.source : null,
+      // The hardware monitor's own presence rides the reading: the panel's
+      // one-click LHM assist is driven by the layer that already knows whether
+      // the CPU is unreadable *because* the monitor is not running. Sources
+      // that cannot answer (or the hidden card) pass `null`, and a `null`
+      // state shows no button at all.
+      lhm: result?.lhm ?? null,
       groups,
       warnings: [...new Set(warnings)],
     }

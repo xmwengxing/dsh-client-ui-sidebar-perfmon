@@ -229,3 +229,39 @@ test('a hidden keep-awake registers no toggle route and spawns nothing', async (
   assert.equal(captured.routes.has(AWAKE_PATH), false, 'hidden means no route, not a dead route')
   assert.ok(captured.route, 'the snapshot route is unaffected')
 })
+
+test('the temperature card registers the LHM assist route, and a hidden card registers nothing', async () => {
+  const { ctx, captured } = fakeConnection()
+  const { apply } = await import('../src/host/index.js')
+  const { LHM_PATH } = await import('../src/host/lhm.js')
+  await apply(ctx, {})
+  assert.ok(captured.routes.has(LHM_PATH), 'the visible temperature card exposes its assist route')
+  const route = captured.routes.get(LHM_PATH)
+  const post = (text) => route.fetch({ text: async () => text })
+
+  // Probe is the safe, read-only action: it answers with whatever the host's
+  // own temperature reading already knows about the monitor. (start/install
+  // raise elevation prompts on a real machine and are covered with an
+  // injected runner in lhm.test.mjs instead.)
+  const probe = await post(JSON.stringify({ action: 'probe' }))
+  assert.equal(probe.status, 200)
+  const payload = await probe.json()
+  assert.equal(payload.ok, true)
+  assert.ok('state' in payload.value, 'every reply carries a state to believe')
+  if (payload.value.state !== null) {
+    assert.ok(
+      ['running', 'installed', 'missing', 'starting'].includes(payload.value.state),
+      `unexpected monitor state: ${payload.value.state}`,
+    )
+  }
+
+  // Malformed asks are refused before any action could run — a click on the
+  // real machine can raise UAC, so the gate matters.
+  assert.equal((await post(JSON.stringify({ action: 'reboot' }))).status, 400)
+  assert.equal((await post(JSON.stringify({}))).status, 400)
+  assert.equal((await post('not json')).status, 400)
+
+  const hidden = await fakeConnection()
+  await apply(hidden.ctx, { temperature: false })
+  assert.equal(hidden.captured.routes.has(LHM_PATH), false, 'a hidden card exposes no assist route')
+})

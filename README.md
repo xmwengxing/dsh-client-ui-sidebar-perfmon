@@ -22,6 +22,12 @@ One page in the right Sidebar, one button in the Session header:
   scale (70 °C and 85 °C). A tile shows its hottest sensor, so a multi-core
   package or a pair of drives stays readable, and its tooltip names every sensor
   it covers. See [Temperatures](#temperatures) for what each platform can answer.
+- **Windows CPU temperature installs itself** — the card's title bar carries a
+  pill for LibreHardwareMonitor: monitor missing → **Install LHM** (winget's
+  pinned package), installed but silent → **Start LHM** (one elevated launch),
+  running → the button retires itself and the readings flow. The tooltip states
+  up front that the UAC prompt answers on the *host's* desktop, and a host
+  without winget gets the official download link instead of a dead end.
 - **Processes** — one row per process: CPU share, resident memory, its share of
   RAM, PID and thread count. Sort by CPU, memory or name, filter by name or PID,
   drag a column divider to resize (widths are remembered per browser). The metric

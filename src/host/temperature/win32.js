@@ -30,7 +30,7 @@
 import { firstAvailable, runCommand } from '../readers/exec.js'
 
 /** PowerShell executables to try, newest name first. */
-const POWERSHELL_CANDIDATES = ['pwsh', 'powershell']
+export const POWERSHELL_CANDIDATES = ['pwsh', 'powershell']
 
 /** WMI namespaces a hardware monitor publishes its sensors under. */
 export const MONITOR_NAMESPACES = ['root/LibreHardwareMonitor', 'root/OpenHardwareMonitor']
@@ -73,6 +73,29 @@ export const TEMPERATURE_SCRIPT = [
   '      $parts = $_ -split ","',
   '      [pscustomobject]@{ index = [string]$parts[0].Trim(); name = [string]$parts[1].Trim(); celsius = [double]$parts[2].Trim() }',
   '    })',
+  '}',
+  // 5. LibreHardwareMonitor's own presence — a live process, an uninstall
+  //    entry, or a known install path — so the panel can offer to install or
+  //    start it instead of only reporting a dash. The lookup is cheap next to
+  //    the CIM calls above and shares their one round trip.
+  '$result.lhm = [ordered]@{ process = $false; path = $null }',
+  'if (Get-Process -Name "LibreHardwareMonitor" -ErrorAction SilentlyContinue) { $result.lhm.process = $true }',
+  '$lhmHits = @()',
+  'foreach ($root in @("HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*", "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*", "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*")) {',
+  '  $lhmHits += @(Get-ItemProperty $root -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "*LibreHardwareMonitor*" } | Select-Object -First 1)',
+  '}',
+  'foreach ($entry in $lhmHits) { if ($entry -and $entry.InstallLocation) { $candidate = Join-Path ([string]$entry.InstallLocation) "LibreHardwareMonitor.exe"; if (Test-Path -LiteralPath $candidate) { $result.lhm.path = [string]$candidate; break } } }',
+  'if (-not $result.lhm.path) {',
+  '  $known = @()',
+  '  if ($env:ProgramFiles) { $known += Join-Path $env:ProgramFiles "LibreHardwareMonitor\\LibreHardwareMonitor.exe" }',
+  '  if (${env:ProgramFiles(x86)}) { $known += Join-Path ${env:ProgramFiles(x86)} "LibreHardwareMonitor\\LibreHardwareMonitor.exe" }',
+  '  if ($env:LOCALAPPDATA) { $known += Join-Path $env:LOCALAPPDATA "Programs\\LibreHardwareMonitor\\LibreHardwareMonitor.exe"; $known += Join-Path $env:LOCALAPPDATA "Microsoft\\WinGet\\Links\\LibreHardwareMonitor.exe" }',
+  '  foreach ($candidate in $known) { if (Test-Path -LiteralPath $candidate) { $result.lhm.path = [string]$candidate; break } }',
+  '}',
+  'if (-not $result.lhm.path -and $env:LOCALAPPDATA) {',
+  '  $pkgRoot = Join-Path $env:LOCALAPPDATA "Microsoft\\WinGet\\Packages"',
+  '  $portable = @(Get-ChildItem -Path $pkgRoot -Recurse -Depth 3 -Filter "LibreHardwareMonitor.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*LibreHardwareMonitor*" } | Select-Object -First 1)',
+  '  if ($portable.Count -gt 0) { $result.lhm.path = [string]$portable[0].FullName }',
   '}',
   '$result | ConvertTo-Json -Compress -Depth 5',
 ].join('\n')
@@ -151,6 +174,33 @@ export function celsiusFromTenthsKelvin(tenths) {
 }
 
 /**
+ * The hardware monitor's presence, as the panel's install/start button sees it.
+ *
+ * - `running` — the WMI namespace answered, so the sensors are on the wire and
+ *   the button has no business being there.
+ * - `installed` — a live process (perhaps without the admin token the driver
+ *   needs) or a located executable, but no sensors: the "start" button.
+ * - `missing` — neither process nor path: the "install" button.
+ * - `null` — the payload carried no presence block at all (another source's
+ *   script, an unreadable reading): no button, and no claim either way.
+ * @param {object} payload - the parsed script payload.
+ * @param {string | null} [monitorSource] - the WMI namespace that answered, if any.
+ * @returns {{state: string, process: boolean, path: string | null} | null} the verdict.
+ */
+export function deriveLhmState(payload, monitorSource) {
+  if (payload === null || typeof payload !== 'object') return null
+  const raw = payload.lhm
+  if (raw === null || typeof raw !== 'object') return null
+  const path = typeof raw.path === 'string' && raw.path !== '' ? raw.path : null
+  const process = raw.process === true
+  let state
+  if (monitorSource) state = 'running'
+  else if (process || path !== null) state = 'installed'
+  else state = 'missing'
+  return { state, process, path }
+}
+
+/**
  * Parse the temperature script's JSON into the plugin's flat sensor list.
  *
  * Sources are applied in descending order of trust *per bucket*: a hardware
@@ -158,7 +208,7 @@ export function celsiusFromTenthsKelvin(tenths) {
  * for it; the zone is only ever the mainboard. A bucket no source can answer is
  * simply absent, and the caller turns that into a warning.
  * @param {string} text - the command's standard output.
- * @returns {{sensors: object[], source: string | null, warnings: string[]}} the parsed reading.
+ * @returns {{sensors: object[], source: string | null, warnings: string[], lhm: object | null}} the parsed reading.
  */
 export function parseTemperatureSample(text) {
   let payload
@@ -252,17 +302,17 @@ export function parseTemperatureSample(text) {
     }
   }
 
-  const source =
-    typeof payload.monitorSource === 'string' && payload.monitorSource !== ''
-      ? payload.monitorSource
-      : sensors.length > 0
-        ? 'windows-cim'
-        : null
+  const monitorSource =
+    typeof payload.monitorSource === 'string' && payload.monitorSource !== '' ? payload.monitorSource : null
+  const source = monitorSource ?? (sensors.length > 0 ? 'windows-cim' : null)
   // Per-bucket warnings are the probe's to add: it is the layer that sees every
   // source at once, so emitting them here as well would double every one of them.
   const warnings = []
   if (sensors.length === 0) warnings.push('temperature-unavailable')
-  return { sensors, source, warnings }
+  // Whether the monitor itself is present rides along for the install/start
+  // button: a payload without the presence block derives `null`, which is how
+  // "no claim" reaches the panel instead of a fabricated state.
+  return { sensors, source, warnings, lhm: deriveLhmState(payload, monitorSource) }
 }
 
 /**

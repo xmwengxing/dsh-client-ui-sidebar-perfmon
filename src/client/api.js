@@ -87,3 +87,24 @@ export async function fetchSnapshot(request = {}) {
 export async function setKeepAwake(on, options = {}) {
   return postJson(AWAKE_PATH, { on: on === true }, options.signal)
 }
+
+/** Absolute path of the LHM assist route. */
+export const LHM_PATH = '/api/perfmon.lhm'
+
+/**
+ * Ask the host to probe, start, or install LibreHardwareMonitor.
+ *
+ * The reply is a business outcome, not an HTTP verdict: `state` is what to
+ * believe until the next snapshot, and `reason` (when present) is a
+ * machine-readable failure the panel localises — `detail` carries raw text
+ * for the tooltip's second line. What this call never sees is the UAC prompt
+ * itself: elevation happens on the HOST's screen (see `host/lhm.js`), which
+ * is exactly why the button's tooltip warns before the click.
+ * @param {'probe' | 'start' | 'install'} action - what to do.
+ * @param {{signal?: AbortSignal}} [options] - optional abort signal.
+ * @returns {Promise<{state: string | null, reason?: string, detail?: string}>} the outcome.
+ * @throws {Error} when the transport fails or the route rejects the request.
+ */
+export async function assistLhm(action, options = {}) {
+  return postJson(LHM_PATH, { action: String(action) }, options.signal)
+}

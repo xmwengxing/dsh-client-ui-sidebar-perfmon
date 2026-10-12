@@ -23,7 +23,7 @@ import { createTranslator } from './copy.js'
 import { installStyles } from './styles.js'
 import { PerfmonBody } from './PerfmonBody.jsx'
 import { HeaderButton } from './HeaderButton.jsx'
-import { AWAKE_PATH, SNAPSHOT_PATH } from './api.js'
+import { AWAKE_PATH, LHM_PATH, SNAPSHOT_PATH } from './api.js'
 
 /** Stable Cordis plugin name; the loader also keys the client bundle by it. */
 export const name = '@xmwengxing/dsh-client-ui-sidebar-perfmon'
@@ -118,4 +118,4 @@ export function apply(ctx) {
   })
 }
 
-export { AWAKE_PATH, SNAPSHOT_PATH }
+export { AWAKE_PATH, LHM_PATH, SNAPSHOT_PATH }

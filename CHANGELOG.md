@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.6.0
+
+- **The temperature card installs and starts the Windows monitor it needs.**
+  Windows CPU temperatures can only come from LibreHardwareMonitor's signed
+  kernel driver chain (WinRing0 → PawnIO reading `IA32_THERM_STATUS`), which
+  nothing in pure user mode can replace — a bare machine just showed `—`. The
+  card now carries a pill on its title bar that follows what the host actually
+  knows: monitor **missing** → **安装LHM** (winget's pinned portable package
+  `LibreHardwareMonitor.LibreHardwareMonitor`, hash-checked by winget; its
+  `namazso.PawnIO` dependency may raise one UAC prompt), installed but silent →
+  **启动LHM** (one elevated `Start-Process`), and **running** → the button
+  retires itself and the real temperature arrives. The verdict flow the user
+  asked for, with the control on the title bar: a native `title` tooltip
+  cannot hold a button, so the *hint* stays in the tooltip while the *action*
+  lives on the pill.
+- **Detection rides the existing thermal read.** A fifth step in the temperature
+  script (`Get-Process`, the three uninstall hives, the usual install paths, a
+  winget-bundle fallback glob) answers `lhm: {process, path}` inside the same
+  PowerShell call — no second process per thermal cycle. `deriveLhmState` is a
+  pure function over that payload: a WMI namespace answering ⇒ `running`;
+  process or executable path ⇒ `installed`; otherwise `missing`; a payload
+  without the block (other platforms, an older host) claims nothing and shows
+  no button.
+- **Every outcome is a localized reason, not a spinner.** The pill's reply is
+  `POST /api/perfmon.lhm` → `{ok, value: {state, reason?, detail?}}`: a
+  cancelled UAC prompt is `elevation-declined` rather than a failure, a
+  double-click during a request is `busy`, a winget-less host gets a
+  manual-download link to the official releases instead of a dead end, and
+  `temperature: false` removes pill and route together. The tooltip says before
+  the click that UAC answers on the **host's** desktop — a remote session
+  cannot click that dialog — and carries the failure's reason and raw detail
+  afterward.
+- Tests: 199 specs (25 new — the presence block and its derivation, the
+  controller's decision table with an injected runner and recorded timers
+  (never a real elevation, never a real wait), route registration with only
+  the safe `probe` action exercised, the third path in the connection
+  contract, and the pill's states, tooltip and manual link in the panel).
+
 ## 0.5.0
 
 - **A keep-awake footer toggle: a remote session no longer dies to idle sleep.**

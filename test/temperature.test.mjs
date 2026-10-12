@@ -28,6 +28,7 @@ import {
   celsiusFromTenthsKelvin,
   classifyMonitorSensor,
   createWin32Temperature,
+  deriveLhmState,
   isTemperatureReading,
   parseTemperatureSample,
   TEMPERATURE_SCRIPT,
@@ -579,4 +580,59 @@ test('the live Linux source answers on a machine that has sensors, and never thr
   assert.ok(Array.isArray(result.sensors))
   // A container with no /sys is a legitimate empty answer, not a failure.
   for (const sensor of result.sensors) assert.equal(Number.isFinite(sensor.celsius), true)
+})
+
+// ---------------------------------------------------------- LHM presence
+
+test('the Windows script reports the monitor presence alongside the sensors', () => {
+  // The install/start button is driven by a block the script itself emits, so
+  // the lookup must exist and share the CIM round trip rather than becoming a
+  // second process every thermal cycle.
+  assert.ok(TEMPERATURE_SCRIPT.includes('$result.lhm'), 'the script must report LHM presence')
+  assert.ok(TEMPERATURE_SCRIPT.includes('Get-Process -Name "LibreHardwareMonitor"'), 'and look for the live process')
+  assert.ok(TEMPERATURE_SCRIPT.includes('Uninstall'), 'and the uninstall entries that locate the executable')
+})
+
+test('monitor presence derives the three button states, and no block means no claim', () => {
+  assert.deepEqual(
+    deriveLhmState({ lhm: { process: false, path: null } }, null),
+    { state: 'missing', process: false, path: null },
+  )
+  assert.deepEqual(
+    deriveLhmState({ lhm: { process: true, path: null } }, null),
+    { state: 'installed', process: true, path: null },
+  )
+  assert.deepEqual(
+    deriveLhmState({ lhm: { process: false, path: 'C:\\x\\LibreHardwareMonitor.exe' } }, null),
+    { state: 'installed', process: false, path: 'C:\\x\\LibreHardwareMonitor.exe' },
+  )
+  // The WMI namespace answering outranks everything: sensors are on the wire.
+  assert.equal(
+    deriveLhmState({ lhm: { process: true, path: 'C:\\x\\LibreHardwareMonitor.exe' } }, 'root/LibreHardwareMonitor')
+      .state,
+    'running',
+  )
+  assert.equal(deriveLhmState({ zones: [] }, null), null, 'a payload without the block claims nothing')
+  assert.equal(deriveLhmState(null, null), null)
+})
+
+test('a parsed sample carries the monitor state through to the probe', () => {
+  const running = parseTemperatureSample(
+    JSON.stringify({
+      monitorSource: 'root/LibreHardwareMonitor',
+      zones: [{ name: 'z', tenthsKelvin: 3000 }],
+      disks: [],
+      gpus: [],
+      lhm: { process: true, path: 'C:\\x\\LibreHardwareMonitor.exe' },
+    }),
+  )
+  assert.equal(running.source, 'root/LibreHardwareMonitor')
+  assert.equal(running.lhm.state, 'running')
+
+  const silent = parseTemperatureSample(JSON.stringify({ zones: [], disks: [], gpus: [] }))
+  assert.equal(silent.lhm, null, 'an older script emits no claim, and no claim shows no button')
+})
+
+test('the hidden reading and a failed read carry no monitor claim', () => {
+  assert.equal(HIDDEN_TEMPERATURE.lhm, null, 'a card the user disabled must never offer to install anything')
 })

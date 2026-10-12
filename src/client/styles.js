@@ -633,7 +633,24 @@ export const STYLES = `
    footer action that is currently doing something to the machine. */
 .dsh-perfmon-awakeOn {
   border-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  color: var(--dsh-alias-brand-primary, #4f6ef7);
+}
+
+/* The temperature card's one-click monitor assist. The pill marks the pending
+   state (installing / starting) in the accent colour while a click is in
+   flight, so the title bar itself says the action is running. */
+.dsh-perfmon-lhm {
+  border-color: var(--dsw-alias-brand-primary, #4f6ef7);
   color: var(--dsw-alias-brand-primary, #4f6ef7);
+}
+
+/* The manual-download fallback for a host without winget: the one path the
+   button cannot take, offered as a link instead. */
+.dsh-perfmon-lhmLink {
+  font-size: 11px;
+  align-self: center;
+  color: var(--dsw-alias-brand-primary, #4f6ef7);
+  text-decoration: underline;
 }
 
 .dsh-perfmon-notice {

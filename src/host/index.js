@@ -28,6 +28,7 @@
 import { createScanController, DU_WARNINGS, resolveProjectDir } from './du.js'
 import { createGpuProbe, HIDDEN_GPU } from './gpu/index.js'
 import { AWAKE_PATH, createKeepAwakeController } from './keep-awake.js'
+import { LHM_ACTIONS, LHM_PATH, createLhmController } from './lhm.js'
 import { createSampler } from './metrics.js'
 import { selectReader } from './readers/index.js'
 import { createTemperatureProbe, HIDDEN_TEMPERATURE } from './temperature/index.js'
@@ -48,6 +49,15 @@ export const SNAPSHOT_PATH = '/api/perfmon.snapshot'
  * built host carries both route paths in one place for the contract spec.
  */
 export { AWAKE_PATH }
+
+/**
+ * Absolute path of the LHM assist route.
+ *
+ * Defined next to its controller (`lhm.js`) and re-exported for the same
+ * reason as the toggle: the built host carries all three route paths in one
+ * place for the contract spec.
+ */
+export { LHM_PATH }
 
 /**
  * Polling cadence per platform.
@@ -300,6 +310,22 @@ export function apply(ctx, config, deps = {}) {
     ctx.effect(() => () => keepAwake.dispose(), 'perfmon: release keep-awake on unload')
   }
 
+  // The temperature card's one-click LHM assist follows the same shape: a
+  // controller that exists only while the card is visible and is disposed
+  // with the fiber. It holds the temperature probe's handle rather than a
+  // probe of its own — detection already rides every thermal reading — so a
+  // launched monitor is re-read on a short leash instead of waiting out the
+  // 15-second cadence, and a hidden card exposes no assist route at all.
+  const lhm = options.temperatureHidden
+    ? null
+    : createLhmController({
+        readState: async () => (await temperatureProbe.read())?.lhm ?? null,
+        refreshTemperature: () => temperatureProbe.refresh(),
+      })
+  if (lhm !== null) {
+    ctx.effect(() => () => lhm.dispose(), 'perfmon: release lhm assist on unload')
+  }
+
   // Which reader is in use is published in every response (`reader`) and in the
   // panel header (the platform label) rather than logged: those are observable in
   // a running deployment, and a boot line here is not.
@@ -371,6 +397,7 @@ export function apply(ctx, config, deps = {}) {
             status: 'unavailable',
             at: null,
             source: null,
+            lhm: null,
             groups: { cpu: null, gpu: null, mainboard: null, disk: null },
             warnings: ['temperature-unavailable'],
           }
@@ -455,33 +482,81 @@ export function apply(ctx, config, deps = {}) {
   // hidden feature exposes no route at all rather than one that answers
   // nothing. The reply carries the post-toggle state plus the bounded event
   // ring — a debugging aid, in memory only, never a file on disk.
-  if (keepAwake === null) return unregisterSnapshot
-  const unregisterAwake = ctx.connection.fetch.register({
-    path: AWAKE_PATH,
-    methods: ['POST'],
-    requestBody: 'buffered',
-    fetch: async (request) => {
-      let body = {}
-      try {
-        const text = await request.text()
-        if (text.trim() !== '') body = JSON.parse(text)
-      } catch {
-        return json({ ok: false, error: { code: 'bad-request', message: 'Request body is not JSON.' } }, 400)
-      }
-      if (typeof body?.on !== 'boolean') {
-        return json(
-          { ok: false, error: { code: 'bad-request', message: 'Expected {"on": true} or {"on": false}.' } },
-          400,
-        )
-      }
-      const state = body.on === true ? keepAwake.enable() : keepAwake.disable()
-      return json({ ok: true, value: { ...state, events: keepAwake.events() } })
-    },
-  })
-  // Unwind in reverse: the toggle stops accepting requests before the snapshot
-  // does, and both close before the effects release the hold itself.
+  const unregisterAwake =
+    keepAwake === null
+      ? null
+      : ctx.connection.fetch.register({
+          path: AWAKE_PATH,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: async (request) => {
+            let body = {}
+            try {
+              const text = await request.text()
+              if (text.trim() !== '') body = JSON.parse(text)
+            } catch {
+              return json({ ok: false, error: { code: 'bad-request', message: 'Request body is not JSON.' } }, 400)
+            }
+            if (typeof body?.on !== 'boolean') {
+              return json(
+                { ok: false, error: { code: 'bad-request', message: 'Expected {"on": true} or {"on": false}.' } },
+                400,
+              )
+            }
+            const state = body.on === true ? keepAwake.enable() : keepAwake.disable()
+            return json({ ok: true, value: { ...state, events: keepAwake.events() } })
+          },
+        })
+
+  // The LHM assist registers on the same condition as the temperature card
+  // itself. Transport failures stay HTTP errors; every outcome a click can
+  // honestly report — including a refusal of the host's UAC prompt — rides
+  // `value` as {state, reason?, detail?} so the panel can localise it.
+  const unregisterLhm =
+    lhm === null
+      ? null
+      : ctx.connection.fetch.register({
+          path: LHM_PATH,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: async (request) => {
+            let body = {}
+            try {
+              const text = await request.text()
+              if (text.trim() !== '') body = JSON.parse(text)
+            } catch {
+              return json({ ok: false, error: { code: 'bad-request', message: 'Request body is not JSON.' } }, 400)
+            }
+            if (typeof body?.action !== 'string' || !LHM_ACTIONS.includes(body.action)) {
+              return json(
+                {
+                  ok: false,
+                  error: { code: 'bad-request', message: `Expected one action: ${LHM_ACTIONS.join(', ')}.` },
+                },
+                400,
+              )
+            }
+            try {
+              return json({ ok: true, value: await lhm.act(body.action) })
+            } catch (error) {
+              // The controller is written not to throw; this is the belt for a
+              // runner that fails outside its own catches — an honest reason
+              // beats a 500 the panel cannot render.
+              ctx.logger?.warn?.('perfmon: lhm assist failed: %s', error?.message ?? String(error))
+              return json({
+                ok: true,
+                value: { state: null, reason: 'action-failed', detail: String(error?.message ?? error) },
+              })
+            }
+          },
+        })
+
+  // Unwind in reverse: the assist and the toggle stop accepting requests
+  // before the snapshot does, and all three close before the effects release
+  // the hold itself.
   return () => {
-    unregisterAwake()
+    unregisterLhm?.()
+    unregisterAwake?.()
     unregisterSnapshot()
   }
 }

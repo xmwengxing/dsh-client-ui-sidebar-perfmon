@@ -270,6 +270,7 @@ test('every colour in the sheet resolves through a design token', async () => {
   assert.match(source, /var\(--dsw-alias-/)
   assert.equal(module.SNAPSHOT_PATH, '/api/perfmon.snapshot')
   assert.equal(module.AWAKE_PATH, '/api/perfmon.awake')
+  assert.equal(module.LHM_PATH, '/api/perfmon.lhm')
 })
 
 test('the panel scrolls as a whole while the process list keeps its own scroll', async () => {

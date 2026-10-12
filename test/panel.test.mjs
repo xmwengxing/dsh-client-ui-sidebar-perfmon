@@ -1207,3 +1207,163 @@ test('the four tiles are the four components the feature promises, in order', ()
     ['cpu', 'gpu', 'mainboard', 'disk'],
   )
 })
+
+// ------------------------------------------------------------- LHM assist
+
+/** The install/start pill on the temperature card's title bar, if any. */
+function lhmButtons(renderer) {
+  return renderer.root.findAll(
+    (node) => node.type === 'button' && String(node.props.className ?? '').includes('dsh-perfmon-lhm'),
+  )
+}
+
+/** A path the fixtures use so a launch assertion has something to name. */
+const INSTALLED_PATH = 'C:\\Program Files\\LHM\\LibreHardwareMonitor.exe'
+
+test('a missing monitor puts an install pill on the title bar; a running one shows none', async (context) => {
+  const missing = temperatureFixture({ lhm: { state: 'missing', process: false, path: null } })
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, {
+      reading: { temperature: missing },
+      t,
+      assist: async () => assert.fail('rendering a button is not clicking it'),
+    }),
+  )
+  const [button] = lhmButtons(renderer)
+  assert.ok(button, 'the host says the monitor is missing, so the card offers to fix it')
+  assert.equal(textOf(button), t('lhmInstall'))
+  // The tooltip states the one thing the click cannot do remotely: elevation
+  // answers a UAC prompt on the HOST's screen.
+  assert.match(button.props.title, /UAC/)
+  assert.match(button.props.title, /主机/)
+  // The pill lives on the title bar — inside the head, with the source meta
+  // still present at the far right of that same row.
+  const head = renderer.root.find((node) => String(node.props.className ?? '') === 'dsh-perfmon-cardHead')
+  assert.ok(
+    head.findAll((node) => node.type === button.type && node.props.className === button.props.className).length === 1,
+    'the pill is a child of the title bar',
+  )
+  assert.equal(textsOf(renderer, 'dsh-perfmon-cardMeta').length, 1)
+
+  // A running monitor is the healthy state: temperatures on screen, no button.
+  const running = temperatureFixture({ lhm: { state: 'running', process: true, path: INSTALLED_PATH } })
+  const healthy = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: running }, t }),
+  )
+  assert.deepEqual(lhmButtons(healthy), [])
+  // And a host that makes no claim at all (other platforms) offers nothing.
+  const quiet = await mount(context, React.createElement(TemperaturePanel, { reading: { temperature: temperatureFixture() }, t }))
+  assert.deepEqual(lhmButtons(quiet), [])
+})
+
+test('an installed monitor offers a start pill whose click runs one action and waits as starting', async (context) => {
+  const clicks = []
+  let release
+  const assist = (action) => {
+    clicks.push(action)
+    return new Promise((resolve) => {
+      release = resolve
+    })
+  }
+  const installed = temperatureFixture({ lhm: { state: 'installed', process: false, path: INSTALLED_PATH } })
+  const element = (reading) => React.createElement(TemperaturePanel, { reading: { temperature: reading }, t, assist })
+  const renderer = await mount(context, element(installed))
+  const [button] = lhmButtons(renderer)
+  assert.equal(textOf(button), t('lhmStart'))
+  assert.equal(button.props.disabled, false)
+
+  await TestRenderer.act(async () => {
+    button.props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  assert.deepEqual(clicks, ['start'], 'one click sends one request')
+  const [busy] = lhmButtons(renderer)
+  assert.equal(textOf(busy), t('lhmStarting'), 'the pill itself carries the pending state')
+  assert.equal(busy.props.disabled, true, 'a second click cannot race the first')
+
+  // The reply says the launch is under way: pending stays until the snapshot
+  // itself reports the monitor running.
+  await TestRenderer.act(async () => {
+    release({ state: 'starting' })
+  })
+  await TestRenderer.act(async () => {})
+  const [stillBusy] = lhmButtons(renderer)
+  assert.equal(textOf(stillBusy), t('lhmStarting'))
+  assert.equal(stillBusy.props.disabled, true)
+
+  // The next snapshot reports `running`: the button retires itself.
+  const running = temperatureFixture({ lhm: { state: 'running', process: true, path: INSTALLED_PATH } })
+  await TestRenderer.act(async () => {
+    renderer.update(element(running))
+  })
+  await TestRenderer.act(async () => {})
+  assert.deepEqual(lhmButtons(renderer), [])
+})
+
+test('a declined elevation reverts the pill and states the reason where the click happened', async (context) => {
+  const assist = async () => ({
+    state: 'installed',
+    reason: 'elevation-declined',
+    detail: 'The operation was canceled by the user.',
+  })
+  const installed = temperatureFixture({ lhm: { state: 'installed', process: false, path: INSTALLED_PATH } })
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: installed }, t, assist }),
+  )
+  await TestRenderer.act(async () => {
+    lhmButtons(renderer)[0].props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  const [after] = lhmButtons(renderer)
+  assert.equal(textOf(after), t('lhmStart'), 'a failure hands the button back instead of spinning')
+  assert.equal(after.props.disabled, false)
+  assert.match(after.props.title, /点击后|启动 LibreHardwareMonitor/, 'the hint still leads the tooltip')
+  assert.match(after.props.title, new RegExp(t('lhmReason.elevation-declined')))
+  assert.match(after.props.title, /canceled by the user/, 'the raw detail rides the last line')
+})
+
+test('a rejected action keeps the panel standing with an honest tooltip', async (context) => {
+  const assist = async () => {
+    throw new Error('offline')
+  }
+  const missing = temperatureFixture({ lhm: { state: 'missing', process: false, path: null } })
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: missing }, t, assist }),
+  )
+  await TestRenderer.act(async () => {
+    lhmButtons(renderer)[0].props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  const [after] = lhmButtons(renderer)
+  assert.equal(textOf(after), t('lhmInstall'))
+  assert.match(after.props.title, new RegExp(t('lhmError')))
+  assert.match(after.props.title, new RegExp(t('lhmReason.action-failed')))
+  assert.match(after.props.title, /offline/)
+  // One failed action is not an error state for the rest of the card.
+  assert.equal(textsOf(renderer, 'dsh-perfmon-tempValue').length, 4)
+  assert.equal(textsOf(renderer, 'dsh-perfmon-notice').length, 0)
+})
+
+test('a host without winget gets the manual download link instead of a dead end', async (context) => {
+  const assist = async () => ({ state: null, reason: 'winget-unavailable' })
+  const missing = temperatureFixture({ lhm: { state: 'missing', process: false, path: null } })
+  const renderer = await mount(
+    context,
+    React.createElement(TemperaturePanel, { reading: { temperature: missing }, t, assist }),
+  )
+  await TestRenderer.act(async () => {
+    lhmButtons(renderer)[0].props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  const [link] = renderer.root.findAll((node) => node.type === 'a' && String(node.props.className ?? '').includes('dsh-perfmon-lhmLink'))
+  assert.ok(link, 'the one path the button cannot take is offered as a link')
+  assert.equal(link.props.href, 'https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases')
+  assert.equal(link.props.target, '_blank')
+  assert.match(link.props.title, /winget/)
+  // And the reason itself is on the pill, so both explanations agree.
+  assert.match(lhmButtons(renderer)[0].props.title, new RegExp(t('lhmReason.winget-unavailable')))
+})
