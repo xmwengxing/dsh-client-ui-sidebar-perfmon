@@ -21,7 +21,7 @@ button.
 | Source version | **0.4.2** |
 | Published on npm | 0.2.0, 0.2.2, 0.3.1, 0.3.2, 0.4.0 — public, zero runtime dependencies |
 | GitHub Releases | v0.1.0 … v0.4.0 (latest; carries the version-free tarball) |
-| Tests | 156 specs across 9 files, green on Windows (153 pass / 3 linux-only skips) and Linux |
+| Tests | 173 specs across 10 files, green on Windows (170 pass / 3 linux-only skips) and Linux |
 | Community list | [PR #6984](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6984) — submitted, both checks green, awaiting a maintainer read |
 | Runtime deps | none (host half uses `node:os` + platform tools, browser half uses the GUI's React) |
 | Licence | MIT |
@@ -34,7 +34,8 @@ Relative to the repository root.
 
 | File | Lines | What it does |
 | --- | --- | --- |
-| `src/host/index.js` | 146 | The Cordis plugin. Resolves config, selects a reader, registers `POST /api/perfmon.snapshot` on Connection's shared authenticated channel, and owns the route's lifetime. |
+| `src/host/index.js` | 487 | The Cordis plugin. Resolves config, selects a reader, registers `POST /api/perfmon.snapshot` and `POST /api/perfmon.awake` on Connection's shared authenticated channel, owns both routes' lifetime, and wires the keep-awake controller (`ctx.effect` disposes it on unload; `keepAwake` hidden → no controller, no route, `awake: null`). |
+| `src/host/keep-awake.js` | 307 | The keep-awake controller: per-platform holder commands (double-quote-free PowerShell `SetThreadExecutionState` re-assert loop / `caffeinate -i -w` / `systemd-inhibit --what=sleep:idle`), support probing, the 10-event in-memory ring, and `enable/disable/dispose` tied to the host pid. Exports `AWAKE_PATH`, `AWAKE_EVENT_LIMIT`. |
 | `src/host/metrics.js` | 271 | Platform-agnostic core: `hostFacts()`, `derive()` (differencing), `sortProcesses()`, `createSampler()`. **This is where the arithmetic lives.** |
 | `src/host/du.js` | The directory scan controller: manual start/stop, an `AbortSignal` through every `readdir`/`lstat`, the viewed session's workspace (a start may name the folder explicitly; the open sessions' folders are the fallback), deduplication and drop accounting, and a stored last reading the poll serves without filesystem work. |
 | `src/host/readers/index.js` | 40 | Reader selection per `process.platform`, plus the display label. |
@@ -57,17 +58,17 @@ Relative to the repository root.
 
 | File | Lines | What it does |
 | --- | --- | --- |
-| `src/client/index.jsx` | 118 | The client plugin: registers the tab type + guide entry, the panel body, and the header button. No `inject` list — services are resolved late through `ctx.inject`. |
-| `src/client/PerfmonBody.jsx` | 251 | The tab body: refresh loop, composes the three cards, and hangs the reading's warnings on the footer's tooltip. |
+| `src/client/index.jsx` | 121 | The client plugin: registers the tab type + guide entry, the panel body, and the header button; re-exports `SNAPSHOT_PATH` and `AWAKE_PATH`. No `inject` list — services are resolved late through `ctx.inject`. |
+| `src/client/PerfmonBody.jsx` | 356 | The tab body: refresh loop, composes the three cards, hangs the reading's warnings on the footer's tooltip, and hosts the keep-awake footer toggle (reply-driven override, confirmed by fresh readings only). |
 | `src/client/GaugePanel.jsx` | 262 | Resource window (three ring gauges plus the project-directory line with its start/stop scan button). Exports `GAUGE_RING`, `DiskPanel`. |
 | `src/client/TemperaturePanel.jsx` | 160 | Temperature window: four **two-line** tiles (CPU / GPU / board / drives), each reading + label, with every sensor and the spread in the tooltip. Exports `TEMPERATURE_TILES`, `TEMPERATURE_TONES`, `temperatureTone`. |
 | `src/client/ProcessPanel.jsx` | 443 | Process window: the sort tags that double as column headers, the resizable column dividers, the search field, the rows. Exports `SORT_TAGS`, `COLUMN_LIMITS`, `clampColumnWidth`, `readStoredWidths`. |
 | `src/client/HeaderButton.jsx` | 42 | The Session-header control. |
 | `src/client/Icon.jsx` | 41 | The perfmon glyph. |
-| `src/client/api.js` | 42 | `fetchSnapshot()` — the one call to the host route. Exports `SNAPSHOT_PATH`. |
-| `src/client/copy.js` | 209 | zh/en dictionaries, language resolution, warning translation. No locale service dependency. |
+| `src/client/api.js` | 89 | `fetchSnapshot()` + `setKeepAwake()` over the two host routes. Exports `SNAPSHOT_PATH`, `AWAKE_PATH`. |
+| `src/client/copy.js` | 339 | zh/en dictionaries, language resolution, warning translation (incl. `awakeReason` hold-failure reasons). No locale service dependency. |
 | `src/client/format.js` | 106 | Byte/percent/duration/clock/temperature formatting; `formatShare` for whole-percent cells. |
-| `src/client/styles.js` | 692 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
+| `src/client/styles.js` | 786 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
 | `client/client.js` | built | Bundled browser half, wrapped in the `window.__ModuleLoader__.load` envelope. **Committed.** |
 
 ### Build, tests, docs, tooling
@@ -78,22 +79,26 @@ Relative to the repository root.
 | `cordis.patch.yml` | 5 | The bundle layer: inserts the `perfmon` row. |
 | `scripts/build.mjs` | 114 | esbuild: host → ESM `lib/`, browser → wrapped classic script `client/`. `--watch` supported. |
 | `scripts/build-test-bundle.mjs` | 36 | Test-only CJS bundle of the internals, so specs can mount components without widening the published API. |
-| `scripts/verify-ui.mjs` | 351 | Drives a real Chromium over the DevTools protocol against a running instance: guide entry, gauges, live refresh, tag sorting, filter, header button. |
-| `test/client-bundle.test.mjs` | 257 | Loads the shipped bundle like the module loader does; asserts registrations, that every component renders from its own inject face, and that no bare colour escapes a `var()`. |
-| `test/contract.test.mjs` | 168 | Re-reads the **installed** dsh packages to confirm slot names, service names, the route rule, and the bundle id still hold. Catches upstream renames. |
+| `scripts/verify-ui.mjs` | 416 | Drives a real Chromium over the DevTools protocol against a running instance: guide entry, gauges, live refresh, tag sorting, filter, header button. `PERFMON_CLIP='x,y,w,h@scale'` clips the final capture (the README hero is `925,38,755,1012@2`, scrolled to top first). |
+| `scripts/verify-awake.mjs` | 317 | The keep-awake toggle end to end: footer button states, the real OS holder counted from Windows' process table (0 → 1 held → 0 released), footer geometry at 1680 px; writes `test/.build/awake-0{1,2,3}-*.png`. |
+| `test/client-bundle.test.mjs` | 273 | Loads the shipped bundle like the module loader does; asserts registrations, that every component renders from its own inject face, and that no bare colour escapes a `var()`. |
+| `test/contract.test.mjs` | 192 | Re-reads the **installed** dsh packages to confirm slot names, service names, the route rule (for `SNAPSHOT_PATH` *and* `AWAKE_PATH`), and the bundle id still hold. Catches upstream renames. |
+| `test/gpu.test.mjs` | 246 | GPU probe specs: per-platform parsers, `memoryPercent`, source selection, and the cache at the panel's cadence. |
+| `test/keep-awake.test.mjs` | 273 | 10 specs: the three holder commands and their Windows quoting invariants, the event-ring cap, unsupported / failed / exited holders, spawn throw, idempotent dispose. |
+| `test/route.test.mjs` | 231 | Route registration over a fake connection: snapshot shape (incl. `awake`), unregister composition, the keep-awake toggle round-trip and 400s, hidden-feature guards. |
 | `test/metrics.test.mjs` | 242 | Differencing arithmetic against hand-built samples, plus live Linux checks (sampler, unit consistency). |
-| `test/panel.test.mjs` | 985 | Behavioural specs through `react-test-renderer`: gauges, temperature tiles and tones, tags, sorting, filtering, refresh, errors, all-unavailable readings, search field, column resizing. |
+| `test/panel.test.mjs` | 1209 | Behavioural specs through `react-test-renderer`: gauges, temperature tiles and tones, tags, sorting, filtering, refresh, errors, all-unavailable readings, search field, column resizing, the keep-awake footer button (toggle lifecycle, hidden fixture, unsupported tooltip, failure revert). |
 | `test/readers.test.mjs` | 286 | Every platform parser against captured tool output, and every reader's failure path through an injected runner. |
 | `test/temperature.test.mjs` | 518 | Every temperature source's parsers and attribution rules, plus the probe's cache/staleness/in-flight behaviour. |
 | `test/du.test.mjs` | 284 | The scan controller: nothing starts implicitly, a stop lands between syscalls, the stored reading costs no filesystem work, budget/symlink/deduplication/drop rules, config resolution. |
-| `test/support/entry.jsx` | 31 | Re-exports the internals the specs drive. Not published. |
-| `README.md` / `README.zh-CN.md` | 214 / 185 | User-facing general intro: real panel screenshot (`assets/screenshot-panel.png`), features, install (3 paths), platform support matrix, how the numbers are produced, configuration. Deliberately no dev-process content (pm2, test suite, internals). |
+| `test/support/entry.jsx` | 34 | Re-exports the internals the specs drive (incl. `AWAKE_PATH`, `setKeepAwake`). Not published. |
+| `README.md` / `README.zh-CN.md` | 223 / 195 | User-facing general intro: real panel screenshot (`assets/screenshot-panel.png`), features, install (3 paths), platform support matrix, how the numbers are produced, configuration. Deliberately no dev-process content (pm2, test suite, internals). |
 | `CHANGELOG.md` | 76 | Per-version notes. The release workflow extracts the matching section for GitHub Release notes. |
 | `RELEASING.md` | 62 | How a release happens, the one-time npm trusted-publisher setting, and why the alternatives are worse. |
 | `.github/workflows/publish.yml` | 94 | Tag-triggered: tests → OIDC publish with provenance → Release with the tarball. |
 | `contrib/awesome-dsh-plugin-entry.yml` | 18 | The community-list submission payload (one file in someone else's repo). |
 | `contrib/submit-pr.sh` | 92 | Does that submission: fork → add the entry → PR. Refuses before the list's 24h repo-age bar. |
-| `assets/screenshot-*.png`, `screenshots.json` | — | `screenshot-panel.png` is the README hero (2× CDP capture, LHM running so CPU temp reads real); storefront images are cropped so no conversation content ships. |
+| `assets/screenshot-*.png`, `screenshots.json` | — | `screenshot-panel.png` is the README hero (2× CDP capture, LHM running so CPU temp reads real; its WMI namespace publishes only ~15 s after the process starts); storefront images are cropped so no conversation content ships. |
 
 ## Architecture: the contracts that must not break
 
@@ -223,6 +228,17 @@ the reader could not read it at all.
 Default refresh is platform-aware because of that cost: 2s Linux, 3s macOS, 4s
 Windows. `refreshIntervalMs` overrides it.
 
+- **A browser tab cannot stop the machine sleeping, so keep-awake runs on the
+  host.** Windows' idle timer resets only on local input or an OS-held wake lock
+  — page activity does nothing — so the client toggle POSTs to a host route that
+  spawns a tiny holder child tied to the host pid. It asserts only sleep/idle
+  (`systemd-inhibit --what=sleep:idle`, never `shutdown`; on Windows
+  `ES_CONTINUOUS | ES_SYSTEM_REQUIRED` re-asserted every 5 minutes while the
+  host lives), releases with the GUI, and its "log" is a 10-event in-memory ring
+  riding the toggle's reply — nothing on disk. A holder that dies within the
+  first seconds marks the platform unable rather than retrying behind the
+  user's back.
+
 ## Commands
 
 ```sh
@@ -265,6 +281,14 @@ chrome --headless=new --remote-debugging-port=9222 --no-sandbox \
 
 # 3. Drive it. `--attach` reuses the already-open page instead of re-navigating.
 node scripts/verify-ui.mjs "http://127.0.0.1:3099/?token=<token>" /tmp/panel.png
+
+# 4. The keep-awake toggle: button states + the OS holder counted from the real
+#    Windows process table (baseline → +1 while held → baseline again).
+node scripts/verify-awake.mjs "http://127.0.0.1:3099/?token=<token>" test/.build
+
+# 5. The README hero (right sidebar only, 2×) — LHM must be running first, and
+#    its WMI namespace appears only ~15 s after the process starts.
+PERFMON_CLIP='925,38,755,1012@2' node scripts/verify-ui.mjs --attach assets/screenshot-panel.png
 ```
 
 ## Traps that cost time here
@@ -555,8 +579,8 @@ Read this section before editing. Every item below was an actual failure.
    the 6 contract specs need `DSH_CLI_ROOT` pointing at the installed
    `@deepseek-ai/dsh` (set it to
    `%APPDATA%\npm\node_modules\@deepseek-ai\dsh`), and the suite is **green on
-   both platforms** — Windows: 128 tests / 125 pass / 0 fail / 3 skipped (the
-   skips are the `process.platform !== 'linux'` guards); Linux: 128 / 128 / 0 / 0.
+   both platforms** — Windows: 173 tests / 170 pass / 0 fail / 3 skipped (the
+   skips are the `process.platform !== 'linux'` guards); Linux: 173 / 173 / 0 / 0.
    It used to be red on Windows by default (17 path-separator failures), which
    made a real regression indistinguishable from known noise; that is fixed, so a
    red run now means something.

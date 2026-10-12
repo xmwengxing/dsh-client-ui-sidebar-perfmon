@@ -582,8 +582,9 @@ export const STYLES = `
 
 .dsh-perfmon-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   padding: 6px 10px 8px;
   font-size: 10px;
   color: var(--dsw-alias-label-tertiary, currentColor);
@@ -606,6 +607,23 @@ export const STYLES = `
 
 .dsh-perfmon-action:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.12));
+}
+
+/* A disabled action states the reason in its tooltip; it must not look clickable. */
+.dsh-perfmon-action:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.dsh-perfmon-action:disabled:hover {
+  background: transparent;
+}
+
+/* The keep-awake toggle while the hold is on: the accent token marks the one
+   footer action that is currently doing something to the machine. */
+.dsh-perfmon-awakeOn {
+  border-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  color: var(--dsw-alias-brand-primary, #4f6ef7);
 }
 
 .dsh-perfmon-notice {

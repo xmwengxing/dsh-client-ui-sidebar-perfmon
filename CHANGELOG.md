@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.5.0
+
+- **A keep-awake footer toggle: a remote session no longer dies to idle sleep.**
+  A browser tab cannot stop the host sleeping — the idle timer only resets on
+  local input or an OS-held wake lock — so the click runs on the *host*: the new
+  `POST /api/perfmon.awake` route spawns a tiny holder process that asserts the
+  platform's wake lock — PowerShell `SetThreadExecutionState`
+  (`ES_CONTINUOUS | ES_SYSTEM_REQUIRED`) on Windows, re-asserting every 5
+  minutes while the host lives; `caffeinate -i -w <host pid>` on macOS;
+  `systemd-inhibit --what=sleep:idle` on Linux (sleep and idle only, never
+  shutdown). The holder waits on the host's pid, so a GUI exit or plugin unload
+  releases the lock by itself, and clicking the button again releases it
+  directly.
+- **Zero cost while off, one sleeping process while on.** Nothing is registered
+  or spawned until the first click. The only work during a hold is the
+  5-minute re-assert; the "log" is a 10-event ring in memory that rides the
+  toggle's reply — no polling loop, no file, no rotation.
+- **Support is reported, not assumed.** The snapshot's `awake` field carries
+  `supported / active / since / reason`. A host missing `powershell.exe` or
+  `systemd-inhibit` renders the button disabled with the reason in its tooltip;
+  a holder that dies within the first seconds marks the platform unable to hold
+  instead of retrying behind the user's back; `keepAwake: false` removes both
+  the button and the route.
+- **The client follows the host.** The toggle's reply is authoritative until the
+  next snapshot confirms it, and two consecutive fresh disagreements (a second
+  tab, a dead holder) hand the state back to the server.
+- Tests: 173 specs (17 new — the three platform holder commands and their
+  Windows quoting invariants, the event-ring cap, both failure paths, route
+  registration / toggling / 400s, and the footer button's states). Browser-
+  verified against a live Windows host: click → the holder appears in the real
+  process table → click → it is gone, with the footer geometry checked at
+  1680 px.
+
 ## 0.4.2
 
 - **The resource card gains a GPU bar between the gauges and the project-folder

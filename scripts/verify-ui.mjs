@@ -15,6 +15,7 @@
  * Usage:
  *   node scripts/verify-ui.mjs <base-url-with-token> [output.png]
  *   node scripts/verify-ui.mjs --attach [output.png]      # drive the open page
+ *   PERFMON_CLIP='925,38,755,1012@2' node … --attach out.png   # clipped, 2×
  *
  * Setup: a Chromium listening on the DevTools port, e.g.
  *   chrome --headless=new --remote-debugging-port=9222 --no-sandbox \
@@ -386,7 +387,30 @@ if (report.headerButton) {
 
 console.log(JSON.stringify(report, null, 2))
 
-const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+// An optional CSS-pixel clip with a scale, e.g. PERFMON_CLIP='925,38,755,1012@2'
+// reproduces the README hero crop (the right Sidebar only, rendered 2×). The
+// page is scrolled back to the top first: the flow above has clicked footer
+// controls, which may have left the panel lower than the shot wants.
+const clipSpec = process.env.PERFMON_CLIP
+let shot
+if (clipSpec === undefined) {
+  shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+} else {
+  await cdp.evaluate(`(() => {
+    window.scrollTo(0, 0);
+    let node = document.querySelector('.dsh-perfmon-root');
+    while (node !== null) { node.scrollTop = 0; node = node.parentElement; }
+    return true;
+  })()`)
+  await new Promise((resolve) => setTimeout(resolve, 800))
+  const [coords, scale = '1'] = clipSpec.split('@')
+  const [x, y, width, height] = coords.split(',').map(Number)
+  shot = await cdp.send('Page.captureScreenshot', {
+    format: 'png',
+    clip: { x, y, width, height, scale: Number(scale) },
+    captureBeyondViewport: true,
+  })
+}
 await writeFile(output, Buffer.from(shot.data, 'base64'))
 console.log(`screenshot: ${output}`)
 cdp.close()

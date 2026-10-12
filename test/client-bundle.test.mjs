@@ -269,4 +269,5 @@ test('every colour in the sheet resolves through a design token', async () => {
   assert.deepEqual(literals, [], 'no bare colour may appear outside a var() fallback')
   assert.match(source, /var\(--dsw-alias-/)
   assert.equal(module.SNAPSHOT_PATH, '/api/perfmon.snapshot')
+  assert.equal(module.AWAKE_PATH, '/api/perfmon.awake')
 })

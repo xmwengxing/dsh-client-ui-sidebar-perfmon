@@ -30,6 +30,14 @@ One page in the right Sidebar, one button in the Session header:
   Windows by default), and polling pauses while the browser tab is hidden. The
   temperature card is the exception: it moves on its own calmer cadence, because
   a temperature is an absolute reading and is expensive to read on Windows.
+- **Keep awake** — a footer toggle so a remote session is not cut off by the
+  host's idle sleep. The click runs on the *host*, which holds the OS wake lock
+  (Windows `SetThreadExecutionState`, macOS `caffeinate`, Linux
+  `systemd-inhibit --what=sleep:idle` — never shutdown) until clicked again or
+  the GUI exits. While off it costs nothing at all; while on it costs one
+  sleeping helper process, and its "log" is a 10-event ring in memory — no
+  file, ever. A host without the platform tool shows the button disabled with
+  the reason.
 
 A figure no platform can answer shows `—` with the reason in its tooltip —
 never a `0`, because zero reads as a measurement.
@@ -84,6 +92,7 @@ between every open panel. Override them in a profile patch when needed:
     gpuIntervalMs: 4000            # 500–60000; defaults to refreshIntervalMs
     # gpu: false                   # hide the GPU line entirely
     # temperature: false           # hide the temperature card entirely
+    # keepAwake: false             # hide the keep-awake (anti-sleep) footer button
     # projectDir: /srv/demo        # pin one folder instead of the viewed session's workspace
     # projectDir: ''               # or hide the directory-size line entirely
 ```

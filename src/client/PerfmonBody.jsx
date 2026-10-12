@@ -12,7 +12,7 @@
  */
 
 import { createElement as h, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { fetchSnapshot } from './api.js'
+import { fetchSnapshot, setKeepAwake } from './api.js'
 import { GaugePanel } from './GaugePanel.jsx'
 import { ProcessPanel } from './ProcessPanel.jsx'
 import { TemperaturePanel } from './TemperaturePanel.jsx'
@@ -46,14 +46,24 @@ function isHidden() {
  * @param {object} props - the injected face.
  * @param {(key: string, values?: object) => string} props.t - translator.
  * @param {(request: object) => Promise<object>} [props.load] - snapshot loader, injectable for tests.
+ * @param {(on: boolean) => Promise<object>} [props.setAwake] - keep-awake toggle, injectable for tests.
  * @param {string} [props.sessionId] - the session whose workspace the meter measures.
  * @param {object} [props.ctx] - the client context, for the mounted-seat fallback.
  * @returns {import('react').ReactNode} the panel.
  */
-export function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
+export function PerfmonBody({ t, load = fetchSnapshot, setAwake = setKeepAwake, sessionId, ctx }) {
   const [sort, setSort] = useState('cpu')
   const [nonce, setNonce] = useState(0)
   const [state, setState] = useState({ status: 'loading', reading: undefined, error: undefined, intervalMs: DEFAULT_INTERVAL_MS })
+  // The direct reply of the last keep-awake toggle: it is the host's own answer
+  // to the click, landing before the next poll can report it. It is dropped as
+  // soon as a snapshot confirms it (or twice disagrees with it) — polling, not
+  // this override, is the lasting source of truth.
+  const [awakeOverride, setAwakeOverride] = useState(null)
+  const [awakeError, setAwakeError] = useState(undefined)
+  const awakeMismatchRef = useRef(0)
+  const awakeBaselineRef = useRef(null)
+  const awakeBaselineSetRef = useRef(false)
   const aliveRef = useRef(true)
 
   const sortRef = useRef(sort)
@@ -186,6 +196,83 @@ export function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
     ? reading.warnings.map((code) => describeWarning(t, String(code))).join('\n')
     : ''
 
+  // The keep-awake button's state. `serverAwake` is the host's truth from the
+  // last snapshot; the override is the direct reply of the last toggle. A
+  // missing `awake` (the feature configured off, or a host too old to know
+  // it) renders no button at all rather than one that would do nothing.
+  const serverAwake = reading?.awake ?? null
+  const awake = serverAwake === null ? null : awakeOverride ?? serverAwake
+  const awakeRef = useRef(awake)
+  awakeRef.current = awake
+
+  useEffect(() => {
+    if (awakeOverride === null) {
+      awakeMismatchRef.current = 0
+      awakeBaselineRef.current = null
+      awakeBaselineSetRef.current = false
+      return
+    }
+    const server = reading?.awake
+    if (server === null || server === undefined) return
+    // The render that carries the override still shows the reading the click
+    // was made against — that one is not an answer. Only a later reading
+    // (a new object from a completed poll) counts as the host speaking.
+    if (!awakeBaselineSetRef.current) {
+      awakeBaselineRef.current = reading
+      awakeBaselineSetRef.current = true
+      return
+    }
+    if (reading === awakeBaselineRef.current) return
+    awakeBaselineRef.current = reading
+    if (server.active === awakeOverride.active) {
+      // Confirmed: ordinary polling resumes with no local state left behind.
+      awakeMismatchRef.current = 0
+      setAwakeOverride(null)
+      return
+    }
+    // One disagreement can be a snapshot that was already in flight when the
+    // click happened; two consecutive fresh ones mean the host genuinely moved
+    // on (another tab toggled it back, the holder died) and its answer wins.
+    awakeMismatchRef.current += 1
+    if (awakeMismatchRef.current >= 2) {
+      awakeMismatchRef.current = 0
+      setAwakeOverride(null)
+    }
+  }, [reading, awakeOverride])
+
+  // One click, one request: the hold itself lives host-side in a holder
+  // process (see `host/keep-awake.js`), so it survives this tab closing —
+  // which is the whole point for a remote session. Either outcome is followed
+  // by an immediate re-poll, so the footer shows the host's answer rather
+  // than the click's intention.
+  const toggleAwake = useCallback(async () => {
+    const next = awakeRef.current?.active !== true
+    try {
+      const value = await setAwake(next)
+      setAwakeOverride(value)
+      setAwakeError(undefined)
+    } catch (toggleError) {
+      setAwakeOverride(null)
+      setAwakeError(toggleError?.message ?? String(toggleError))
+    }
+    setNonce((value) => value + 1)
+  }, [setAwake])
+
+  // What the button's tooltip promises, in order: what a click does right now,
+  // why the host cannot hold (if it cannot), and the last failure (if any).
+  const awakeTitle =
+    awake === null
+      ? undefined
+      : [
+          awake.active === true ? t('awakeHintActive') : t('awakeHintStart'),
+          awake.reason === null || awake.reason === undefined ? '' : t(`awakeReason.${awake.reason}`),
+          awakeError === undefined || awakeError === null || awakeError === ''
+            ? ''
+            : `${t('awakeError')}: ${awakeError}`,
+        ]
+          .filter((part) => part !== '')
+          .join('\n') || undefined
+
   return h(
     'div',
     { className: 'dsh-perfmon-root' },
@@ -237,11 +324,29 @@ export function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
       ),
       h('span', null, t('autoRefresh', { seconds: Math.round(intervalMs / 1000) })),
       status === 'stale' && error !== undefined ? h('span', null, `${t('errorTitle')}: ${error}`) : null,
+      // The keep-awake toggle, sitting next to the refresh button and pushing
+      // it to the right edge: these two are the footer's actions, the text to
+      // their left is the footer's status. When the feature is off (awake is
+      // null) the button is not rendered at all, and the spacer moves back to
+      // the refresh button so the layout stays as it was.
+      awake === null
+        ? null
+        : h(
+            'button',
+            {
+              type: 'button',
+              className: `dsh-perfmon-action dsh-perfmon-awake${awake.active === true ? ' dsh-perfmon-awakeOn' : ''} dsh-perfmon-footSpacer`,
+              disabled: awake.supported !== true,
+              title: awakeTitle,
+              onClick: toggleAwake,
+            },
+            awake.active === true ? t('awakeActive') : t('awakeStart'),
+          ),
       h(
         'button',
         {
           type: 'button',
-          className: 'dsh-perfmon-action dsh-perfmon-footSpacer',
+          className: awake === null ? 'dsh-perfmon-action dsh-perfmon-footSpacer' : 'dsh-perfmon-action',
           onClick: refresh,
         },
         t('refresh'),

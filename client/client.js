@@ -25,6 +25,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/client/index.jsx
 var index_exports = {};
 __export(index_exports, {
+  AWAKE_PATH: () => AWAKE_PATH,
   PERFMON_KIND: () => PERFMON_KIND,
   PERFMON_TYPE_ID: () => PERFMON_TYPE_ID,
   SNAPSHOT_PATH: () => SNAPSHOT_PATH,
@@ -95,6 +96,22 @@ var ZH = {
   refresh: "\u7ACB\u5373\u5237\u65B0",
   autoRefresh: "\u6BCF {seconds} \u79D2\u81EA\u52A8\u5237\u65B0",
   updatedAt: "\u66F4\u65B0\u4E8E {time}",
+  awakeStart: "\u4FDD\u6301\u5524\u9192",
+  awakeActive: "\u9632\u7761\u7720\u4E2D",
+  awakeHintStart: "\u70B9\u51FB\u540E\u5BBF\u4E3B\u963B\u6B62\u7CFB\u7EDF\u81EA\u52A8\u7761\u7720\u2014\u2014\u8FDC\u7A0B\u4F7F\u7528\u4E0D\u518D\u6389\u7EBF",
+  awakeHintActive: "\u5BBF\u4E3B\u6B63\u5728\u963B\u6B62\u7CFB\u7EDF\u7761\u7720\u2014\u2014\u518D\u6B21\u70B9\u51FB\u505C\u6B62",
+  awakeError: "\u9632\u7761\u7720\u64CD\u4F5C\u5931\u8D25",
+  // Why the host cannot hold, when it cannot: shown in the button's tooltip
+  // next to the reason it is disabled.
+  awakeReason: {
+    "powershell-missing": "\u672A\u627E\u5230 PowerShell\uFF0C\u65E0\u6CD5\u963B\u6B62\u7CFB\u7EDF\u7761\u7720",
+    "caffeinate-missing": "\u672A\u627E\u5230 caffeinate\uFF0C\u65E0\u6CD5\u963B\u6B62\u7CFB\u7EDF\u7761\u7720",
+    "systemd-inhibit-missing": "\u672A\u627E\u5230 systemd-inhibit\uFF0C\u65E0\u6CD5\u963B\u6B62\u7CFB\u7EDF\u7761\u7720",
+    "unsupported-platform": "\u5F53\u524D\u5E73\u53F0\u4E0D\u652F\u6301\u9632\u7761\u7720",
+    "spawn-failed": "\u9632\u7761\u7720\u8FDB\u7A0B\u542F\u52A8\u5931\u8D25",
+    "hold-failed": "\u9632\u7761\u7720\u672A\u80FD\u751F\u6548\uFF0C\u5DF2\u81EA\u52A8\u5173\u95ED",
+    "holder-exited": "\u9632\u7761\u7720\u8FDB\u7A0B\u5DF2\u9000\u51FA\uFF0C\u53EF\u91CD\u65B0\u5F00\u542F"
+  },
   loading: "\u6B63\u5728\u8BFB\u53D6\u4E3B\u673A\u6307\u6807\u2026",
   empty: "\u6CA1\u6709\u5339\u914D\u7684\u8FDB\u7A0B",
   emptyAll: "\u6CA1\u6709\u8BFB\u5230\u8FDB\u7A0B\u4FE1\u606F",
@@ -213,6 +230,22 @@ var EN = {
   refresh: "Refresh now",
   autoRefresh: "Auto-refresh every {seconds}s",
   updatedAt: "Updated {time}",
+  awakeStart: "Keep awake",
+  awakeActive: "Awake held",
+  awakeHintStart: "Click to stop the host from sleeping \u2014 remote sessions stay connected",
+  awakeHintActive: "The host is being kept awake \u2014 click again to stop",
+  awakeError: "Keep-awake failed",
+  // Why the host cannot hold, when it cannot: shown in the button's tooltip
+  // next to the reason it is disabled.
+  awakeReason: {
+    "powershell-missing": "PowerShell was not found, so sleep cannot be blocked",
+    "caffeinate-missing": "caffeinate was not found, so sleep cannot be blocked",
+    "systemd-inhibit-missing": "systemd-inhibit was not found, so sleep cannot be blocked",
+    "unsupported-platform": "This platform cannot keep the host awake",
+    "spawn-failed": "The keep-awake process failed to start",
+    "hold-failed": "The hold never took effect and was switched off",
+    "holder-exited": "The keep-awake process exited; you can start it again"
+  },
   loading: "Reading host metrics\u2026",
   empty: "No process matches the filter",
   emptyAll: "No process information available",
@@ -871,8 +904,9 @@ var STYLES = `
 
 .dsh-perfmon-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   padding: 6px 10px 8px;
   font-size: 10px;
   color: var(--dsw-alias-label-tertiary, currentColor);
@@ -895,6 +929,23 @@ var STYLES = `
 
 .dsh-perfmon-action:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.12));
+}
+
+/* A disabled action states the reason in its tooltip; it must not look clickable. */
+.dsh-perfmon-action:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.dsh-perfmon-action:disabled:hover {
+  background: transparent;
+}
+
+/* The keep-awake toggle while the hold is on: the accent token marks the one
+   footer action that is currently doing something to the machine. */
+.dsh-perfmon-awakeOn {
+  border-color: var(--dsw-alias-brand-primary, #4f6ef7);
+  color: var(--dsw-alias-brand-primary, #4f6ef7);
 }
 
 .dsh-perfmon-notice {
@@ -1057,16 +1108,14 @@ var import_react4 = require("react");
 
 // src/client/api.js
 var SNAPSHOT_PATH = "/api/perfmon.snapshot";
-async function fetchSnapshot(request = {}) {
-  const body = { sort: request.sort, limit: request.limit };
-  if (request.measure === true || request.measure === false) body.measure = request.measure;
-  if (typeof request.session === "string" && request.session !== "") body.session = request.session;
-  const response = await fetch(SNAPSHOT_PATH, {
+var AWAKE_PATH = "/api/perfmon.awake";
+async function postJson(path, body, signal) {
+  const response = await fetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
     credentials: "same-origin",
-    signal: request.signal
+    signal
   });
   const text = await response.text();
   let payload;
@@ -1080,6 +1129,15 @@ async function fetchSnapshot(request = {}) {
     throw new Error(typeof message === "string" && message !== "" ? message : `HTTP ${String(response.status)}`);
   }
   return payload.value;
+}
+async function fetchSnapshot(request = {}) {
+  const body = { sort: request.sort, limit: request.limit };
+  if (request.measure === true || request.measure === false) body.measure = request.measure;
+  if (typeof request.session === "string" && request.session !== "") body.session = request.session;
+  return postJson(SNAPSHOT_PATH, body, request.signal);
+}
+async function setKeepAwake(on, options = {}) {
+  return postJson(AWAKE_PATH, { on: on === true }, options.signal);
 }
 
 // src/client/GaugePanel.jsx
@@ -1792,10 +1850,15 @@ var DEFAULT_LIMIT = 60;
 function isHidden() {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
-function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
+function PerfmonBody({ t, load = fetchSnapshot, setAwake = setKeepAwake, sessionId, ctx }) {
   const [sort, setSort] = (0, import_react4.useState)("cpu");
   const [nonce, setNonce] = (0, import_react4.useState)(0);
   const [state, setState] = (0, import_react4.useState)({ status: "loading", reading: void 0, error: void 0, intervalMs: DEFAULT_INTERVAL_MS });
+  const [awakeOverride, setAwakeOverride] = (0, import_react4.useState)(null);
+  const [awakeError, setAwakeError] = (0, import_react4.useState)(void 0);
+  const awakeMismatchRef = (0, import_react4.useRef)(0);
+  const awakeBaselineRef = (0, import_react4.useRef)(null);
+  const awakeBaselineSetRef = (0, import_react4.useRef)(false);
   const aliveRef = (0, import_react4.useRef)(true);
   const sortRef = (0, import_react4.useRef)(sort);
   sortRef.current = sort;
@@ -1899,6 +1962,54 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
   const { reading, status, error, intervalMs } = state;
   const failed = status === "error";
   const warningText = Array.isArray(reading?.warnings) ? reading.warnings.map((code) => describeWarning(t, String(code))).join("\n") : "";
+  const serverAwake = reading?.awake ?? null;
+  const awake = serverAwake === null ? null : awakeOverride ?? serverAwake;
+  const awakeRef = (0, import_react4.useRef)(awake);
+  awakeRef.current = awake;
+  (0, import_react4.useEffect)(() => {
+    if (awakeOverride === null) {
+      awakeMismatchRef.current = 0;
+      awakeBaselineRef.current = null;
+      awakeBaselineSetRef.current = false;
+      return;
+    }
+    const server = reading?.awake;
+    if (server === null || server === void 0) return;
+    if (!awakeBaselineSetRef.current) {
+      awakeBaselineRef.current = reading;
+      awakeBaselineSetRef.current = true;
+      return;
+    }
+    if (reading === awakeBaselineRef.current) return;
+    awakeBaselineRef.current = reading;
+    if (server.active === awakeOverride.active) {
+      awakeMismatchRef.current = 0;
+      setAwakeOverride(null);
+      return;
+    }
+    awakeMismatchRef.current += 1;
+    if (awakeMismatchRef.current >= 2) {
+      awakeMismatchRef.current = 0;
+      setAwakeOverride(null);
+    }
+  }, [reading, awakeOverride]);
+  const toggleAwake = (0, import_react4.useCallback)(async () => {
+    const next = awakeRef.current?.active !== true;
+    try {
+      const value = await setAwake(next);
+      setAwakeOverride(value);
+      setAwakeError(void 0);
+    } catch (toggleError) {
+      setAwakeOverride(null);
+      setAwakeError(toggleError?.message ?? String(toggleError));
+    }
+    setNonce((value) => value + 1);
+  }, [setAwake]);
+  const awakeTitle = awake === null ? void 0 : [
+    awake.active === true ? t("awakeHintActive") : t("awakeHintStart"),
+    awake.reason === null || awake.reason === void 0 ? "" : t(`awakeReason.${awake.reason}`),
+    awakeError === void 0 || awakeError === null || awakeError === "" ? "" : `${t("awakeError")}: ${awakeError}`
+  ].filter((part) => part !== "").join("\n") || void 0;
   return (0, import_react4.createElement)(
     "div",
     { className: "dsh-perfmon-root" },
@@ -1944,11 +2055,27 @@ function PerfmonBody({ t, load = fetchSnapshot, sessionId, ctx }) {
       ),
       (0, import_react4.createElement)("span", null, t("autoRefresh", { seconds: Math.round(intervalMs / 1e3) })),
       status === "stale" && error !== void 0 ? (0, import_react4.createElement)("span", null, `${t("errorTitle")}: ${error}`) : null,
+      // The keep-awake toggle, sitting next to the refresh button and pushing
+      // it to the right edge: these two are the footer's actions, the text to
+      // their left is the footer's status. When the feature is off (awake is
+      // null) the button is not rendered at all, and the spacer moves back to
+      // the refresh button so the layout stays as it was.
+      awake === null ? null : (0, import_react4.createElement)(
+        "button",
+        {
+          type: "button",
+          className: `dsh-perfmon-action dsh-perfmon-awake${awake.active === true ? " dsh-perfmon-awakeOn" : ""} dsh-perfmon-footSpacer`,
+          disabled: awake.supported !== true,
+          title: awakeTitle,
+          onClick: toggleAwake
+        },
+        awake.active === true ? t("awakeActive") : t("awakeStart")
+      ),
       (0, import_react4.createElement)(
         "button",
         {
           type: "button",
-          className: "dsh-perfmon-action dsh-perfmon-footSpacer",
+          className: awake === null ? "dsh-perfmon-action dsh-perfmon-footSpacer" : "dsh-perfmon-action",
           onClick: refresh
         },
         t("refresh")

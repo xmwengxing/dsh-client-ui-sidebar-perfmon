@@ -31,4 +31,4 @@ export {
   formatClock,
   barWidth,
 } from '../../src/client/format.js'
-export { SNAPSHOT_PATH } from '../../src/client/api.js'
+export { AWAKE_PATH, SNAPSHOT_PATH, setKeepAwake } from '../../src/client/api.js'

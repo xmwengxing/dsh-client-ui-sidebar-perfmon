@@ -665,6 +665,104 @@ test('the panel reads once on mount, re-reads when the tag changes, and can be r
   assert.deepEqual(requests, ['cpu', 'mem', 'mem'])
 })
 
+/** The keep-awake toggle, if the current reading carries one. */
+function awakeButtons(renderer) {
+  return renderer.root.findAll(
+    (node) => node.type === 'button' && String(node.props.className ?? '').includes('dsh-perfmon-awake'),
+  )
+}
+
+test('the footer toggle arms the hold, shows it, and re-polls for the host answer', async (context) => {
+  const toggles = []
+  let loads = 0
+  const load = async () => {
+    loads += 1
+    return readingFixture({ awake: { supported: true, active: false, since: null, reason: null } })
+  }
+  const setAwake = async (on) => {
+    toggles.push(on)
+    return { supported: true, active: on, since: on ? 1700000000000 : null, reason: null, events: [] }
+  }
+  const renderer = await mount(context, React.createElement(PerfmonBody, { t, load, setAwake }))
+  assert.equal(loads, 1, 'one read on mount')
+  const [button] = awakeButtons(renderer)
+  assert.equal(textOf(button), '保持唤醒')
+  assert.equal(button.props.disabled, false)
+
+  await TestRenderer.act(async () => {
+    button.props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  assert.deepEqual(toggles, [true], 'one click sends one request')
+  assert.equal(loads, 2, 'the click pulls the host answer now, not on the next tick')
+  const [held] = awakeButtons(renderer)
+  assert.equal(textOf(held), '防睡眠中')
+  assert.match(held.props.className, /dsh-perfmon-awakeOn/)
+
+  await TestRenderer.act(async () => {
+    held.props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  assert.deepEqual(toggles, [true, false])
+  const [released] = awakeButtons(renderer)
+  assert.equal(textOf(released), '保持唤醒')
+  assert.doesNotMatch(released.props.className, /dsh-perfmon-awakeOn/, 'the accent only marks a hold in effect')
+})
+
+test('a reading without keep-awake state renders no toggle, and the spacer returns to refresh', async (context) => {
+  const load = async () => readingFixture()
+  const renderer = await mount(
+    context,
+    React.createElement(PerfmonBody, {
+      t,
+      load,
+      // A feature that renders nothing must be able to send nothing.
+      setAwake: async () => assert.fail('no toggle renders, so nothing may be sent'),
+    }),
+  )
+  assert.deepEqual(awakeButtons(renderer), [])
+  const refresh = renderer.root.find(
+    (node) => node.type === 'button' && String(node.props.className ?? '').includes('dsh-perfmon-footSpacer'),
+  )
+  assert.match(textOf(refresh), /立即刷新/)
+})
+
+test('an unsupported host disables the toggle and says why in its tooltip', async (context) => {
+  const load = async () =>
+    readingFixture({ awake: { supported: false, active: false, since: null, reason: 'powershell-missing' } })
+  const renderer = await mount(
+    context,
+    React.createElement(PerfmonBody, {
+      t,
+      load,
+      setAwake: async () => assert.fail('a disabled button must not click through'),
+    }),
+  )
+  const [button] = awakeButtons(renderer)
+  assert.equal(button.props.disabled, true)
+  assert.match(button.props.title, /未找到 PowerShell/)
+  assert.match(button.props.title, /点击后宿主阻止系统自动睡眠/)
+})
+
+test('a failed toggle reports itself in the tooltip and leaves the panel standing', async (context) => {
+  const load = async () => readingFixture({ awake: { supported: true, active: false, since: null, reason: null } })
+  const setAwake = async () => {
+    throw new Error('offline')
+  }
+  const renderer = await mount(context, React.createElement(PerfmonBody, { t, load, setAwake }))
+  const [button] = awakeButtons(renderer)
+  await TestRenderer.act(async () => {
+    button.props.onClick()
+  })
+  await TestRenderer.act(async () => {})
+  const [after] = awakeButtons(renderer)
+  assert.equal(textOf(after), '保持唤醒', 'a failure reverts instead of pretending to hold')
+  assert.match(after.props.title, /防睡眠操作失败: offline/)
+  // The rest of the panel is untouched: one failed action is not an error state.
+  assert.equal(textsOf(renderer, 'dsh-perfmon-notice').length, 0)
+  assert.equal(rowNames(renderer).length, 2)
+})
+
 test('a failing read shows the error and a retry that reads again', async (context) => {
   let attempt = 0
   const load = async () => {

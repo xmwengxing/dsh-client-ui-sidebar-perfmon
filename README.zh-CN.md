@@ -24,6 +24,15 @@ CPU / 内存 / 交换内存仪表盘、显卡频率与显存条、CPU / 显卡 /
 - **刷新**：同一间隔驱动所有窗口（默认 Linux 2 秒 / macOS 3 秒 / Windows 4 秒），
   标签页隐藏时暂停轮询。温度卡片例外，按自己更保守的节奏刷新——温度是绝对读数，
   且在 Windows 上读取昂贵。
+- **保持唤醒**：远程使用时不再被宿主的自动睡眠掐断连接。浏览器标签页无法阻止系统
+  休眠（空闲计时只被本地输入或操作系统唤醒锁重置），所以点击由**宿主**执行：新的
+  `/api/perfmon.awake` 路由启动一个极小的持锁进程——Windows 用
+  `SetThreadExecutionState`（`ES_CONTINUOUS | ES_SYSTEM_REQUIRED`，宿主存活期间每
+  5 分钟重新断言）、macOS 用 `caffeinate -i -w <宿主 pid>`、Linux 用
+  `systemd-inhibit`（只锁 sleep/idle，**绝不锁关机**）；持锁进程绑定宿主进程号，
+  GUI 退出或插件卸载即自动释放，再点一次按钮则立即释放。未开启时零开销；开启后
+  只是一个休眠等待的辅助进程，「日志」是内存里的 10 条环形事件，不写任何文件。
+  平台缺少对应工具时按钮置灰，并在悬浮提示中说明原因。
 
 任何平台都答不出的数字显示 `—` 并在悬浮提示中说明原因——绝不用 `0` 顶替，
 因为 0 看起来像一次真实测量。
@@ -74,6 +83,7 @@ dsh plugin --profile web add github:xmwengxing/dsh-client-ui-sidebar-perfmon
     gpuIntervalMs: 4000            # 500–60000，默认跟随 refreshIntervalMs
     # gpu: false                   # 完全隐藏显卡行
     # temperature: false           # 完全隐藏温度卡片
+    # keepAwake: false             # 完全隐藏「保持唤醒」（防睡眠）页脚按钮
     # projectDir: /srv/demo        # 固定扫描某个目录，而不是跟随当前查看的会话
     # projectDir: ''               # 或完全隐藏目录大小行
 ```

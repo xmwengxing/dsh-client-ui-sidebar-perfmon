@@ -39,11 +39,16 @@ function samplePair(base) {
 }
 
 /**
- * A Connection stub that records the registered route and exposes its handler.
- * @returns {object} the context and the captured route.
+ * A Connection stub that records every registered route by path.
+ *
+ * `captured.route` still resolves to the snapshot route (most specs read that
+ * one), while `captured.routes` exposes all of them: the keep-awake toggle
+ * registers a second route when the feature is on, and a hidden feature must
+ * leave it unregistered rather than serve a route that answers nothing.
+ * @returns {object} the context and the captured routes.
  */
 function fakeConnection() {
-  const captured = { route: undefined }
+  const captured = { routes: new Map() }
   const ctx = {
     logger: { warn() {} },
     effect(callback) {
@@ -58,12 +63,17 @@ function fakeConnection() {
     connection: {
       fetch: {
         register(route) {
-          captured.route = route
-          return () => {}
+          captured.routes.set(route.path, route)
+          return () => {
+            captured.routes.delete(route.path)
+          }
         },
       },
     },
   }
+  Object.defineProperty(captured, 'route', {
+    get: () => captured.routes.get('/api/perfmon.snapshot'),
+  })
   return { ctx, captured }
 }
 
@@ -138,4 +148,84 @@ test('both probes are constructed, so neither read is swallowed by the fallback'
     false,
     `a probe failed to read, which means it was never constructed: ${warnings.join('; ')}`,
   )
+})
+
+test('the snapshot reports the keep-awake state, and a hidden feature reports nothing', async () => {
+  const body = await snapshot()
+  const awake = body.value.awake
+  assert.ok(awake !== null && typeof awake === 'object', 'the toggle state rides every snapshot')
+  assert.equal(typeof awake.supported, 'boolean', 'support is a platform fact, not a guess')
+  assert.equal(awake.active, false)
+  assert.equal(awake.since, null)
+
+  const hidden = await snapshot({ keepAwake: false })
+  assert.equal(hidden.value.awake, null, 'keepAwake: false reports no state at all')
+})
+
+/** A child stub with just the face the controller touches. */
+function stubChild() {
+  const listeners = new Map()
+  return {
+    pid: 777001,
+    on: (event, callback) => listeners.set(event, callback),
+    kill: () => listeners.get('exit')?.(0),
+  }
+}
+
+test('the awake route toggles an injected holder and the snapshot agrees with it', async () => {
+  const { ctx, captured } = fakeConnection()
+  const { apply } = await import('../src/host/index.js')
+  const { AWAKE_PATH } = await import('../src/host/keep-awake.js')
+  const spawned = []
+  await apply(
+    ctx,
+    {},
+    {
+      platform: 'win32',
+      exists: () => true,
+      spawn: (command, args, options) => {
+        spawned.push({ command, args, options })
+        return stubChild()
+      },
+      kill: () => {},
+    },
+  )
+  assert.ok(captured.routes.has(AWAKE_PATH), 'the visible feature registers its route')
+  const route = captured.routes.get(AWAKE_PATH)
+  const post = (text) => route.fetch({ text: async () => text })
+
+  const response = await post(JSON.stringify({ on: true }))
+  assert.equal(response.status, 200)
+  const payload = await response.json()
+  assert.equal(payload.ok, true)
+  assert.equal(payload.value.active, true)
+  assert.equal(payload.value.supported, true)
+  assert.ok(Array.isArray(payload.value.events), 'the bounded event ring rides the reply')
+  assert.equal(spawned.length, 1, 'one click, one holder')
+
+  // One source of truth: the next snapshot reflects the click, so a second
+  // tab (or a re-opened panel) shows the hold without clicking anything.
+  const body = await (await captured.route.fetch({ text: async () => '{}' })).json()
+  assert.equal(body.value.awake.active, true)
+
+  const off = await (await post(JSON.stringify({ on: false }))).json()
+  assert.equal(off.value.active, false)
+
+  // Malformed asks are rejected before anything is spawned or killed.
+  assert.equal((await post('{"on": 1}')).status, 400, 'on must be a boolean')
+  assert.equal((await post('{}')).status, 400, 'on is required')
+  assert.equal((await post('not json')).status, 400, 'the body must be JSON')
+})
+
+test('a hidden keep-awake registers no toggle route and spawns nothing', async () => {
+  const { ctx, captured } = fakeConnection()
+  const { apply } = await import('../src/host/index.js')
+  const { AWAKE_PATH } = await import('../src/host/keep-awake.js')
+  await apply(
+    ctx,
+    { keepAwake: false },
+    { spawn: () => assert.fail('a hidden feature must never spawn a holder'), kill: () => {} },
+  )
+  assert.equal(captured.routes.has(AWAKE_PATH), false, 'hidden means no route, not a dead route')
+  assert.ok(captured.route, 'the snapshot route is unaffected')
 })

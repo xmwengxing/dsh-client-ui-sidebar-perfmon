@@ -27,6 +27,7 @@
 
 import { createScanController, DU_WARNINGS, resolveProjectDir } from './du.js'
 import { createGpuProbe, HIDDEN_GPU } from './gpu/index.js'
+import { AWAKE_PATH, createKeepAwakeController } from './keep-awake.js'
 import { createSampler } from './metrics.js'
 import { selectReader } from './readers/index.js'
 import { createTemperatureProbe, HIDDEN_TEMPERATURE } from './temperature/index.js'
@@ -39,6 +40,14 @@ export const inject = ['connection']
 
 /** Absolute path of the snapshot route on the shared `/api` channel. */
 export const SNAPSHOT_PATH = '/api/perfmon.snapshot'
+
+/**
+ * Absolute path of the keep-awake toggle route.
+ *
+ * Defined next to its holder (`keep-awake.js`) and re-exported here so the
+ * built host carries both route paths in one place for the contract spec.
+ */
+export { AWAKE_PATH }
 
 /**
  * Polling cadence per platform.
@@ -85,10 +94,11 @@ const DEFAULTS = {
  * The row may be configured from a profile patch, so every field is optional and
  * an out-of-range value falls back to the default instead of failing the boot.
  * `projectDir` pins one folder for the manual scan; `''` or `false` removes the
- * line entirely; unset follows the open sessions.
+ * line entirely; unset follows the open sessions. `keepAwake: false` (or `''`)
+ * removes the keep-awake toggle the same way.
  * @param {object} [config] - the row's `config` block.
  * @param {string} platform - the reporting platform.
- * @returns {{refreshIntervalMs: number, processLimit: number, cacheMillis: number, sampleMillis: number, projectDir: string | null, projectDirHidden: boolean, projectDirEntryBudget: number, projectDirMaxDirs: number, temperatureHidden: boolean, temperatureIntervalMs: number, gpuHidden: boolean, gpuIntervalMs: number}} resolved options.
+ * @returns {{refreshIntervalMs: number, processLimit: number, cacheMillis: number, sampleMillis: number, projectDir: string | null, projectDirHidden: boolean, projectDirEntryBudget: number, projectDirMaxDirs: number, temperatureHidden: boolean, temperatureIntervalMs: number, gpuHidden: boolean, gpuIntervalMs: number, keepAwakeHidden: boolean}} resolved options.
  */
 export function resolveConfig(config, platform) {
   const source = config ?? {}
@@ -105,6 +115,9 @@ export function resolveConfig(config, platform) {
   const temperatureConfig = source.temperature
   // `gpu: false` (or `''`) removes the GPU line entirely.
   const gpuConfig = source.gpu
+  // `keepAwake: false` (or `''`) removes the keep-awake toggle: no controller
+  // is built, the snapshot reports `awake: null` and no route is registered.
+  const keepAwakeConfig = source.keepAwake
   const refreshIntervalMs = positive(source.refreshIntervalMs, DEFAULT_REFRESH_MS[platform] ?? 4000, 500, 60000)
   return {
     refreshIntervalMs,
@@ -124,6 +137,7 @@ export function resolveConfig(config, platform) {
     ),
     gpuHidden: gpuConfig === false || gpuConfig === '',
     gpuIntervalMs: positive(source.gpuIntervalMs, refreshIntervalMs, 500, 60000),
+    keepAwakeHidden: keepAwakeConfig === false || keepAwakeConfig === '',
   }
 }
 
@@ -231,9 +245,10 @@ function readOpenCwds(store) {
  *
  * @param {import('@deepseek-ai/cordis').Context} ctx - host plugin context carrying `connection`.
  * @param {object} [config] - the row's `config` block.
- * @returns {Promise<() => Promise<void>> | (() => Promise<void>)} the route disposer.
+ * @param {object} [deps] - collaborators for the keep-awake holder, injectable for tests.
+ * @returns {Promise<() => Promise<void>> | (() => Promise<void>)} the disposer that unregisters the route(s).
  */
-export function apply(ctx, config) {
+export function apply(ctx, config, deps = {}) {
   const platform = process.platform
   const options = resolveConfig(config, platform)
   const reader = selectReader(platform)
@@ -272,6 +287,19 @@ export function apply(ctx, config) {
     maxDirs: options.projectDirMaxDirs,
   })
 
+  // The keep-awake toggle's host side: one sleeping holder process while the
+  // hold is on, nothing at all while it is off (see `keep-awake.js` for why
+  // background HTTP traffic cannot hold a machine awake by itself). A row
+  // configured `keepAwake: false` builds no controller, so the feature costs
+  // nothing — not a route, not a state in the snapshot.
+  const keepAwake = options.keepAwakeHidden ? null : createKeepAwakeController(deps)
+  if (keepAwake !== null) {
+    // Unload releases the hold: the route that manages it disappears with the
+    // fiber, and a hold nobody can turn off is exactly the failure mode to
+    // avoid. The holder's parent-pid watch covers crashes beyond this point.
+    ctx.effect(() => () => keepAwake.dispose(), 'perfmon: release keep-awake on unload')
+  }
+
   // Which reader is in use is published in every response (`reader`) and in the
   // panel header (the platform label) rather than logged: those are observable in
   // a running deployment, and a boot line here is not.
@@ -291,7 +319,7 @@ export function apply(ctx, config) {
     'perfmon: stop any running directory scan',
   )
 
-  return ctx.connection.fetch.register({
+  const unregisterSnapshot = ctx.connection.fetch.register({
     path: SNAPSHOT_PATH,
     methods: ['POST'],
     requestBody: 'buffered',
@@ -397,6 +425,11 @@ export function apply(ctx, config) {
             disk,
             gpu,
             temperature,
+            // The keep-awake state rides every snapshot so the footer button
+            // shows the host's truth — including a holder that died on its
+            // own — rather than an optimistic local guess. `null` means the
+            // feature is configured off, and is how the panel hides the button.
+            awake: keepAwake === null ? null : keepAwake.state(),
             // A hidden card contributes no warning: the user asked for it to be
             // absent, so there is nothing to explain.
             warnings: [
@@ -417,4 +450,38 @@ export function apply(ctx, config) {
       }
     },
   })
+
+  // The keep-awake toggle registers only when the feature is visible, so a
+  // hidden feature exposes no route at all rather than one that answers
+  // nothing. The reply carries the post-toggle state plus the bounded event
+  // ring — a debugging aid, in memory only, never a file on disk.
+  if (keepAwake === null) return unregisterSnapshot
+  const unregisterAwake = ctx.connection.fetch.register({
+    path: AWAKE_PATH,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      let body = {}
+      try {
+        const text = await request.text()
+        if (text.trim() !== '') body = JSON.parse(text)
+      } catch {
+        return json({ ok: false, error: { code: 'bad-request', message: 'Request body is not JSON.' } }, 400)
+      }
+      if (typeof body?.on !== 'boolean') {
+        return json(
+          { ok: false, error: { code: 'bad-request', message: 'Expected {"on": true} or {"on": false}.' } },
+          400,
+        )
+      }
+      const state = body.on === true ? keepAwake.enable() : keepAwake.disable()
+      return json({ ok: true, value: { ...state, events: keepAwake.events() } })
+    },
+  })
+  // Unwind in reverse: the toggle stops accepting requests before the snapshot
+  // does, and both close before the effects release the hold itself.
+  return () => {
+    unregisterAwake()
+    unregisterSnapshot()
+  }
 }

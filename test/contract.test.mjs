@@ -129,11 +129,13 @@ test('the plugin bundle id matches the package name the loader validates', async
   assert.ok('./client' in manifest.exports, 'dsh.client requires a ./client export')
 })
 
-test('the snapshot route satisfies the connection path rule', async () => {
+test('the snapshot and keep-awake routes satisfy the connection path rule', async () => {
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
   const host = await readFile(join(root, manifest.main), 'utf8')
   const path = host.match(/SNAPSHOT_PATH\s*=\s*"([^"]+)"/)?.[1]
   assert.equal(path, '/api/perfmon.snapshot')
+  const awakePath = host.match(/AWAKE_PATH\s*=\s*"([^"]+)"/)?.[1]
+  assert.equal(awakePath, '/api/perfmon.awake')
 
   // `assertFetchRoute` admits only `/api/<segment>…` with these characters, and
   // the shared handler dispatches on the exact pathname.
@@ -142,9 +144,11 @@ test('the snapshot route satisfies the connection path rule', async () => {
   const pattern = source.match(/ENDPOINT_SEGMENT_PATTERN\s*=\s*(\/\^.*?\/)/)?.[1]
   assert.ok(pattern !== undefined, 'the connection endpoint pattern moved; re-check the route rule')
   const segmentPattern = new RegExp(pattern.slice(1, -1))
-  assert.ok(path.startsWith('/api/'), 'the route must live under the authenticated /api channel')
-  for (const segment of path.slice('/api/'.length).split('/')) {
-    assert.ok(segmentPattern.test(segment), `segment ${segment} is rejected by the connection rule`)
+  for (const routePath of [path, awakePath]) {
+    assert.ok(routePath.startsWith('/api/'), 'the route must live under the authenticated /api channel')
+    for (const segment of routePath.slice('/api/'.length).split('/')) {
+      assert.ok(segmentPattern.test(segment), `segment ${segment} is rejected by the connection rule`)
+    }
   }
   assert.match(source, /path: channel/, 'the connection no longer mounts the channel as a prefix route')
 })
