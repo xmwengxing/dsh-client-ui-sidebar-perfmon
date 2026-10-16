@@ -32,6 +32,11 @@
   the click that UAC answers on the **host's** desktop — a remote session
   cannot click that dialog — and carries the failure's reason and raw detail
   afterward.
+- **The Session-header control is icon-only.** Its 性能监控信息 label is gone:
+  the button sits in a row of icon controls beside the Sidebar's expand button,
+  where a text label read as a heading in the Session header. The glyph is now
+  the whole button (a 28 px square), and the tooltip plus the accessible name
+  keep the wording.
 - Tests: 199 specs (25 new — the presence block and its derivation, the
   controller's decision table with an injected runner and recorded timers
   (never a real elevation, never a real wait), route registration with only

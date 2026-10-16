@@ -64,12 +64,12 @@ Relative to the repository root.
 | `src/client/GaugePanel.jsx` | 262 | Resource window (three ring gauges plus the project-directory line with its start/stop scan button). Exports `GAUGE_RING`, `DiskPanel`. |
 | `src/client/TemperaturePanel.jsx` | 325 | Temperature window: four **two-line** tiles (CPU / GPU / board / drives), each reading + label, with every sensor and the spread in the tooltip — plus the title-bar LHM pill (`LhmAssist`: 安装/启动 states, pending labels, tooltip = hint + localized reason + raw detail, the winget-less manual link, a 90 s action timeout, and retirement once the host reports `running`). Exports `TEMPERATURE_TILES`, `TEMPERATURE_TONES`, `temperatureTone`, `LHM_ACTION_TIMEOUT_MS`, `LHM_MANUAL_URL`. |
 | `src/client/ProcessPanel.jsx` | 443 | Process window: the sort tags that double as column headers, the resizable column dividers, the search field, the rows. Exports `SORT_TAGS`, `COLUMN_LIMITS`, `clampColumnWidth`, `readStoredWidths`. |
-| `src/client/HeaderButton.jsx` | 42 | The Session-header control. |
+| `src/client/HeaderButton.jsx` | 49 | The Session-header control: an icon-only 28 px square whose tooltip and accessible name carry the wording (`headerButtonOpen`). |
 | `src/client/Icon.jsx` | 41 | The perfmon glyph. |
 | `src/client/api.js` | 110 | `fetchSnapshot()`, `setKeepAwake()` and `assistLhm(action)` over the three host routes. Exports `SNAPSHOT_PATH`, `AWAKE_PATH`, `LHM_PATH`. |
-| `src/client/copy.js` | 397 | zh/en dictionaries, language resolution, warning translation (incl. `awakeReason` and the `lhmReason` failure codes). No locale service dependency. |
+| `src/client/copy.js` | 395 | zh/en dictionaries, language resolution, warning translation (incl. `awakeReason` and the `lhmReason` failure codes). No locale service dependency. |
 | `src/client/format.js` | 106 | Byte/percent/duration/clock/temperature formatting; `formatShare` for whole-percent cells. |
-| `src/client/styles.js` | 813 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
+| `src/client/styles.js` | 809 | The whole stylesheet as a template string, plus `installStyles()`. **Read the traps section before editing this file.** |
 | `client/client.js` | built | Bundled browser half, wrapped in the `window.__ModuleLoader__.load` envelope. **Committed.** |
 
 ### Build, tests, docs, tooling
@@ -80,18 +80,18 @@ Relative to the repository root.
 | `cordis.patch.yml` | 5 | The bundle layer: inserts the `perfmon` row. |
 | `scripts/build.mjs` | 114 | esbuild: host → ESM `lib/`, browser → wrapped classic script `client/`. `--watch` supported. |
 | `scripts/build-test-bundle.mjs` | 36 | Test-only CJS bundle of the internals, so specs can mount components without widening the published API. |
-| `scripts/verify-ui.mjs` | 416 | Drives a real Chromium over the DevTools protocol against a running instance: guide entry, gauges, live refresh, tag sorting, filter, header button. `PERFMON_CLIP='x,y,w,h@scale'` clips the final capture (the README hero is `925,38,755,1012@2`, scrolled to top first). |
+| `scripts/verify-ui.mjs` | 426 | Drives a real Chromium over the DevTools protocol against a running instance: guide entry, gauges, live refresh, tag sorting, filter, header button. The Session picker takes the first row that has a box (a collapsed workspace group leaves its rows unclickable) and reports whether the click landed; the header block reports `label`/`icon`/`title` plus the button's right edge against the Sidebar corner's left edge. `PERFMON_SESSION_MATCH=<row text>` chooses the Session, `PERFMON_CLIP='x,y,w,h@scale'` clips the final capture (the README hero is `925,38,755,1012@2`, scrolled to top first). |
 | `scripts/verify-awake.mjs` | 317 | The keep-awake toggle end to end: footer button states, the real OS holder counted from Windows' process table (0 → 1 held → 0 released), footer geometry at 1680 px; writes `test/.build/awake-0{1,2,3}-*.png`. |
 | `scripts/verify-scroll.mjs` | 307 | The two independent scrollports end to end: short pane (page scroll accepted, 360px list floor held, footer reachable) and tall-pane regression (no page scroll, card grows), inner/outer `scrollTop` independence; writes `test/.build/scroll-short-{top,bottom}.png`. |
 | `scripts/verify-lhm.mjs` | 257 | The LHM pill against the real host: the pill on the title bar must agree with the assist route's own `probe` answer (running → no pill, installed → a start pill, missing → an install pill), the temperature card's meta intact, `probe` 200, a bogus action gated 400 — and it **never** dispatches `start`/`install`, because UAC would answer on the host's own desktop. Writes `test/.build/lhm-verify-healthy.png`. |
 | `test/client-bundle.test.mjs` | 302 | Loads the shipped bundle like the module loader does; asserts registrations, that every component renders from its own inject face, that no bare colour escapes a `var()`, all three route paths, and the two-scrollports sheet invariants (page scroll, 360px floor, inner scroll). |
-| `test/contract.test.mjs` | 194 | Re-reads the **installed** dsh packages to confirm slot names, service names, the route rule (for `SNAPSHOT_PATH`, `AWAKE_PATH` *and* `LHM_PATH`), and the bundle id still hold. Catches upstream renames. |
+| `test/contract.test.mjs` | 224 | Re-reads the **installed** dsh packages to confirm slot names, service names, the route rule (for `SNAPSHOT_PATH`, `AWAKE_PATH` *and* `LHM_PATH`), and the bundle id still hold. Catches upstream renames. The injected-package check resolves each package's `exports["./client"]` the way the loader's own resolver does (string, or a one-level object's `default`) rather than assuming `lib/client.js` — under dsh 0.2.1-alpha.3 `dsh-client-connection` points that at `lib/client.browser.js`. |
 | `test/gpu.test.mjs` | 246 | GPU probe specs: per-platform parsers, `memoryPercent`, source selection, and the cache at the panel's cadence. |
 | `test/keep-awake.test.mjs` | 273 | 10 specs: the three holder commands and their Windows quoting invariants, the event-ring cap, unsupported / failed / exited holders, spawn throw, idempotent dispose. |
 | `test/lhm.test.mjs` | 244 | 15 specs: the assist controller's decision table over an injected runner/state/timers — probe passthrough, `unsupported`, the launch's decline/failure/no-path/no-shell branches, `winget-unavailable`, not-escalated, the elevated retry then launch, locate-miss, `busy`, `bad-action`. **No real elevation and no real wait ever happens here.** |
 | `test/route.test.mjs` | 267 | Route registration over a fake connection: snapshot shape (incl. `awake`), unregister composition, the keep-awake toggle round-trip and 400s, hidden-feature guards, and the LHM assist route (registration, `probe` only, bad-action/bad-JSON 400s). |
 | `test/metrics.test.mjs` | 242 | Differencing arithmetic against hand-built samples, plus live Linux checks (sampler, unit consistency). |
-| `test/panel.test.mjs` | 1369 | Behavioural specs through `react-test-renderer`: gauges, temperature tiles and tones, tags, sorting, filtering, refresh, errors, all-unavailable readings, search field, column resizing, the keep-awake footer button (toggle lifecycle, hidden fixture, unsupported tooltip, failure revert), and the LHM pill (missing/installed/running, pending labels, declined tooltip, failure revert, manual link). |
+| `test/panel.test.mjs` | 1376 | Behavioural specs through `react-test-renderer`: gauges, temperature tiles and tones, tags, sorting, filtering, refresh, errors, all-unavailable readings, search field, column resizing, the keep-awake footer button (toggle lifecycle, hidden fixture, unsupported tooltip, failure revert), the header control (icon-only: one `svg` child, tooltip, click), and the LHM pill (missing/installed/running, pending labels, declined tooltip, failure revert, manual link). |
 | `test/readers.test.mjs` | 286 | Every platform parser against captured tool output, and every reader's failure path through an injected runner. |
 | `test/temperature.test.mjs` | 638 | Every temperature source's parsers and attribution rules, the probe's cache/staleness/in-flight behaviour, and the LHM presence block (script step, `deriveLhmState` mappings, passthrough, hidden reading). |
 | `test/du.test.mjs` | 284 | The scan controller: nothing starts implicitly, a stop lands between syscalls, the stored reading costs no filesystem work, budget/symlink/deduplication/drop rules, config resolution. |
@@ -143,7 +143,9 @@ Relative to the repository root.
      — the body for every tab of the kind.
    - `ctx.slots.register()` under `conversation.session.header.utilities`, ordered
      last so the button lands beside the Sidebar's own expand control (the corner
-     seat is single-occupancy and belongs to `sidebar-right`).
+     seat is single-occupancy and belongs to `sidebar-right`). It renders the
+     glyph alone — no text label — and carries the wording in `title`/`aria-label`
+     (`headerButtonOpen`), which is what a spec asserts.
 
    Service resolution is deliberately late (`ctx.inject`, no declared `inject`
    list), so a profile without the right Sidebar or without Connection skips that
@@ -308,6 +310,17 @@ PERFMON_CLIP='925,38,755,1012@2' node scripts/verify-ui.mjs --attach assets/scre
 #    the host's desktop; those paths live in test/lhm.test.mjs with an
 #    injected runner): pill ⇔ probe state, meta intact, bogus action 400.
 node scripts/verify-lhm.mjs "http://127.0.0.1:3099/?token=<token>" test/.build
+
+# 8. The Session-header control is icon-only. The report's `header` block must
+#    read `label: ""` with `icon: true` and the tooltip wording, and its right
+#    edge must stay left of the Sidebar's corner button. The seat only exists on
+#    a Session with content, and a collapsed workspace group leaves its rows
+#    unclickable, so the script picks the first row with a box — point
+#    PERFMON_SESSION_MATCH at a visible row's text when that is not the one you
+#    want. Verified on dsh 0.2.1-alpha.3: `label: ""`, `icon: true`,
+#    `title: 打开性能监控面板`, right 1632 vs corner 1640.
+PERFMON_SESSION_MATCH=HANDOFF PERFMON_CLIP='820,0,860,60@2' \
+  node scripts/verify-ui.mjs "http://127.0.0.1:3099/?token=<token>" /tmp/header.png
 ```
 
 ## Traps that cost time here
@@ -317,7 +330,10 @@ Read this section before editing. Every item below was an actual failure.
 1. **Never put a backtick inside a CSS comment in `styles.js`.** The stylesheet is a
    template literal, so a backtick in a comment ends the string and the build fails
    with a confusing `Expected ";" but found ...` at a CSS-looking location. This
-   happened twice.
+   happened twice. The same trap applies to every template literal that carries
+   code as text — a backtick inside a `cdp.evaluate(\`...\`)` comment in
+   `scripts/verify-ui.mjs` fails the whole module with
+   `SyntaxError: missing ) after argument list`.
 
 2. **A crashing slot entry is silently retired.** `SlotCore` abdicates an entry whose
    component throws: it stays on the ledger but is excluded from the projection, so

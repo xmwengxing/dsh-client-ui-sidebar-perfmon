@@ -40,7 +40,6 @@ var ZH = {
   title: "\u6027\u80FD\u76D1\u63A7",
   tabTitle: "\u6027\u80FD\u76D1\u63A7",
   description: "\u5B9E\u65F6\u67E5\u770B CPU\u3001\u5185\u5B58\u4E0E\u8FDB\u7A0B\u5360\u7528",
-  headerButton: "\u6027\u80FD\u76D1\u63A7\u4FE1\u606F",
   headerButtonOpen: "\u6253\u5F00\u6027\u80FD\u76D1\u63A7\u9762\u677F",
   resources: "\u8D44\u6E90\u5360\u7528",
   processes: "\u8FDB\u7A0B\u5217\u8868",
@@ -203,7 +202,6 @@ var EN = {
   title: "Performance",
   tabTitle: "Performance",
   description: "Live CPU, memory and process usage",
-  headerButton: "Performance monitor",
   headerButtonOpen: "Open the performance monitor",
   resources: "Resource usage",
   processes: "Processes",
@@ -1148,30 +1146,26 @@ var STYLES = `
   color: var(--dsw-alias-state-error-primary, currentColor);
 }
 
+/* Icon-only square, matching the icon controls beside it in the utilities row. */
 .dsh-perfmon-headerButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
   font: inherit;
   font-size: 12px;
   cursor: pointer;
   block-size: 28px;
-  padding: 0 10px;
+  inline-size: 28px;
+  padding: 0;
   border: 0.5px solid transparent;
   border-radius: var(--dsw-radius-sm, 6px);
   background: transparent;
   color: var(--dsw-alias-label-secondary, currentColor);
-  white-space: nowrap;
 }
 
 .dsh-perfmon-headerButton:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.12));
   color: var(--dsw-alias-label-primary, currentColor);
-}
-
-.dsh-perfmon-headerButtonLabel {
-  white-space: nowrap;
 }
 `;
 function installStyles() {
@@ -2294,7 +2288,6 @@ function PerfmonIcon({ size = 16, className }) {
 
 // src/client/HeaderButton.jsx
 function HeaderButton({ sessionId, open, t }) {
-  const label = t("headerButton");
   return (0, import_react6.createElement)(
     "button",
     {
@@ -2306,8 +2299,7 @@ function HeaderButton({ sessionId, open, t }) {
         open(sessionId);
       }
     },
-    (0, import_react6.createElement)(PerfmonIcon, { size: 15 }),
-    (0, import_react6.createElement)("span", { className: "dsh-perfmon-headerButtonLabel" }, label)
+    (0, import_react6.createElement)(PerfmonIcon, { size: 15 })
   );
 }
 

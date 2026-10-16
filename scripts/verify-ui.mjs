@@ -348,15 +348,22 @@ if (report.panel) {
 const sessionRow = await cdp.evaluate(`(() => {
   const rows = Array.from(document.querySelectorAll('[data-row-key]'))
     .filter((node) => (node.getAttribute('data-row-key') || '').startsWith('session:'));
-  const row = rows.find((node) => (node.textContent || '').includes(${JSON.stringify(process.env.PERFMON_SESSION_MATCH ?? '')})) ?? rows[0];
+  // A collapsed workspace group keeps its rows in the DOM with no box at all, and
+  // a real mouse click on one of those never lands — pick a row that has a box.
+  const visible = (node) => {
+    const box = node.getBoundingClientRect();
+    return box.width > 0 && box.height > 0;
+  };
+  const match = ${JSON.stringify(process.env.PERFMON_SESSION_MATCH ?? '')};
+  const row = rows.find((node) => visible(node) && (node.textContent || '').includes(match)) ?? rows.find(visible);
   if (!row) return null;
   row.setAttribute('data-perfmon-session', '1');
   return row.getAttribute('data-row-key');
 })()`)
 report.sessionRow = sessionRow
 if (sessionRow !== null) {
-  await cdp.click('[data-perfmon-session="1"]')
-  report.steps.push('session-opened')
+  const clicked = await cdp.click('[data-perfmon-session="1"]')
+  report.steps.push(`session-opened:${String(clicked)}`)
 }
 report.utilitiesSeat = await waitFor(
   `document.querySelector('[data-slot="conversation.session.header.utilities"]')`,
@@ -376,6 +383,9 @@ if (report.headerButton) {
     const utilities = document.querySelector('[data-slot="conversation.session.header.utilities"]');
     return {
       label: button.textContent,
+      // The button is icon-only: the wording is in the tooltip and the
+      // accessible name, so an empty text content beside an svg is the pass.
+      icon: Boolean(button.querySelector('svg')),
       title: button.getAttribute('title'),
       buttonRight: Math.round(box.right),
       cornerLeft: cornerBox ? Math.round(cornerBox.left) : null,

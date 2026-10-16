@@ -767,30 +767,26 @@ export const STYLES = `
   color: var(--dsw-alias-state-error-primary, currentColor);
 }
 
+/* Icon-only square, matching the icon controls beside it in the utilities row. */
 .dsh-perfmon-headerButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
   font: inherit;
   font-size: 12px;
   cursor: pointer;
   block-size: 28px;
-  padding: 0 10px;
+  inline-size: 28px;
+  padding: 0;
   border: 0.5px solid transparent;
   border-radius: var(--dsw-radius-sm, 6px);
   background: transparent;
   color: var(--dsw-alias-label-secondary, currentColor);
-  white-space: nowrap;
 }
 
 .dsh-perfmon-headerButton:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.12));
   color: var(--dsw-alias-label-primary, currentColor);
-}
-
-.dsh-perfmon-headerButtonLabel {
-  white-space: nowrap;
 }
 `
 

@@ -75,8 +75,9 @@ Then restart the GUI. Remove it again with
 `dsh plugin --profile web remove @xmwengxing/dsh-client-ui-sidebar-perfmon`.
 
 To open the panel: the right Sidebar's guide page lists a **性能监控** card that
-opens the page as a tab; from then on the **性能监控信息** button in the Session
-header opens or focuses that tab.
+opens the page as a tab; from then on the icon button in the Session header
+opens or focuses that tab — the button carries no text label, its tooltip and
+accessible name say "打开性能监控面板" / "Open the performance monitor".
 
 ## Configuration
 

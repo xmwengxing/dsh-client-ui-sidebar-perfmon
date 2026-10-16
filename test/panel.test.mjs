@@ -786,7 +786,7 @@ test('a failing read shows the error and a retry that reads again', async (conte
   assert.equal(rowNames(renderer).length, 2)
 })
 
-test('the header control is labelled and opens the page', async (context) => {
+test('the header control is an icon-only button that opens the page', async (context) => {
   const opened = []
   const renderer = await mount(
     context,
@@ -795,6 +795,13 @@ test('the header control is labelled and opens the page', async (context) => {
   const button = renderer.root.findByType('button')
   assert.equal(button.props.title, '打开性能监控面板')
   assert.equal(button.props['aria-label'], '打开性能监控面板')
+  // The wording lives in the tooltip and the accessible name, never in the row:
+  // the button renders the glyph alone, so it reads as a control beside the
+  // Sidebar's expand button rather than as a heading in the Session header.
+  const tree = renderer.toJSON()
+  assert.equal(tree.children.length, 1, 'the glyph is the only child')
+  assert.equal(tree.children[0].type, 'svg')
+  assert.equal(renderer.root.findAllByType('span').length, 0)
   await TestRenderer.act(async () => {
     button.props.onClick()
   })

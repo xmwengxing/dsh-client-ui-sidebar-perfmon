@@ -1,6 +1,6 @@
 /**
- * The header control: one button beside the Session utilities that opens the
- * perfmon page in the right Sidebar.
+ * The header control: one icon button beside the Session utilities that opens
+ * the perfmon page in the right Sidebar.
  *
  * It lives in `conversation.session.header.utilities` — the list seat the
  * Session log export already extends — and registers with the highest order so
@@ -18,6 +18,11 @@ import { PerfmonIcon } from './Icon.jsx'
 /**
  * Render the header button.
  *
+ * Icon-only on purpose: it sits in a row of icon controls whose neighbour is
+ * the Sidebar's own expand button, and a text label there read as a heading in
+ * the Session header rather than as a control. The wording lives in the
+ * tooltip and the accessible name instead.
+ *
  * The session-scoped seat injects `sessionId` — the session whose header row
  * the button sits in — and it is carried to the perfmon page so its folder
  * meter knows which workspace the user is looking at.
@@ -28,7 +33,6 @@ import { PerfmonIcon } from './Icon.jsx'
  * @returns {import('react').ReactNode} the button.
  */
 export function HeaderButton({ sessionId, open, t }) {
-  const label = t('headerButton')
   return h(
     'button',
     {
@@ -41,6 +45,5 @@ export function HeaderButton({ sessionId, open, t }) {
       },
     },
     h(PerfmonIcon, { size: 15 }),
-    h('span', { className: 'dsh-perfmon-headerButtonLabel' }, label),
   )
 }

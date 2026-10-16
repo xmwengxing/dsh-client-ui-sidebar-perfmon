@@ -228,7 +228,7 @@ test('every registered component renders from its own injected face', async () =
   }
 })
 
-test('the header control receives the translator its label needs', async () => {
+test('the header control receives the translator its tooltip needs', async () => {
   const { captured } = await applyBundle()
   const header = captured.slotRegistrations.find(
     (entry) => entry.definition.name === 'conversation.session.header.utilities',
@@ -247,7 +247,7 @@ test('the header control receives the translator its label needs', async () => {
     writable: descriptor?.writable ?? true,
   })
   try {
-    assert.equal(face.t('headerButton'), '性能监控信息', 'and it must be the plugin translator')
+    assert.equal(face.t('headerButtonOpen'), '打开性能监控面板', 'and it must be the plugin translator')
   } finally {
     if (descriptor) Object.defineProperty(globalThis, 'navigator', descriptor)
     else delete globalThis.navigator

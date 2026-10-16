@@ -65,7 +65,7 @@ dsh plugin --profile web add github:xmwengxing/dsh-client-ui-sidebar-perfmon
 然后重启 GUI。卸载：`dsh plugin --profile web remove @xmwengxing/dsh-client-ui-sidebar-perfmon`。
 
 打开方式：右侧栏引导页列出 **性能监控** 卡片，点击即以 tab 打开该页面；此后会话顶栏的
-**性能监控信息** 按钮可打开或聚焦同一 tab。
+图标按钮可打开或聚焦同一 tab（按钮只有图标，文字说明在 tooltip 与无障碍名称里）。
 
 ## 配置
 
