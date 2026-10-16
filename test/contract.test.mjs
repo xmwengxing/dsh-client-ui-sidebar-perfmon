@@ -89,6 +89,29 @@ async function readIfPresent(path) {
   }
 }
 
+/**
+ * Resolve a package's browser half the way the client loader does.
+ *
+ * The loader reads `exports["./client"]` and accepts a string or a one-level
+ * conditional object with a string `default` (`dsh-client-modules`, the
+ * `clientExportOf` resolver). Several shipped packages now point that at
+ * `lib/client.browser.js` rather than `lib/client.js`, so hard-coding a
+ * filename here would report a healthy package as unloadable.
+ * @param {string} dir - the package directory.
+ * @returns {Promise<string | undefined>} the client entry's absolute path.
+ */
+async function clientEntry(dir) {
+  let manifest
+  try {
+    manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'))
+  } catch {
+    return undefined
+  }
+  const declared = manifest.exports?.['./client']
+  const relative = typeof declared === 'string' ? declared : declared?.default
+  return typeof relative === 'string' ? join(dir, relative) : undefined
+}
+
 test('the sidebar seats this plugin registers into still exist', async () => {
   const sidebar = await packageDir('@deepseek-ai/dsh-client-ui-sidebar-right')
   const contract = await readFile(
@@ -179,14 +202,21 @@ test('every package the manifest injects ships a client module the loader serves
   assert.ok(inject.length > 0, 'the manifest declares no client injects to check')
   for (const name of inject) {
     // The client loader registers each injected package before its consumer, so
-    // a types-only dependency (no lib/client.js) leaves this plugin registered
-    // but never applied — no panel, no log, no error anywhere.
+    // a package with no `./client` entry (or a dangling one) leaves this plugin
+    // registered but never applied — no panel, no log, no error anywhere.
     const dir = await packageDir(name)
+    const entry = await clientEntry(dir)
+    if (entry === undefined) {
+      throw new Error(
+        `${name} declares no exports["./client"]; the loader would never apply this plugin. ` +
+          'Remove it from dsh.client.inject or point the manifest at what loads.',
+      )
+    }
     try {
-      await access(join(dir, 'lib', 'client.js'))
+      await access(entry)
     } catch {
       throw new Error(
-        `${name} ships no client module; the loader would never apply this plugin. ` +
+        `${name} ships no client module at ${entry}; the loader would never apply this plugin. ` +
           'Remove it from dsh.client.inject or point the manifest at what loads.',
       )
     }
